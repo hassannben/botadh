@@ -41,7 +41,7 @@ function saveData(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-// ================== SEND ==================
+// ================== SEND MESSAGE ==================
 async function send(chatId, text, options = {}) {
   try {
     await axios.post(`${API}/sendMessage`, {
@@ -66,31 +66,36 @@ function mainMenu() {
   };
 }
 
-// ================== GET API ==================
+// ================== GET API (SAFE) ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
+      timeout: 30000,
       headers: {
-        accept: "application/json"
-      },
-      timeout: 15000
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0"
+      }
     });
 
-    return res.data;
+    return res.data || [];
   } catch (e) {
     console.log("API error:", e.message);
     return [];
   }
 }
 
-// ================== CHECK SYSTEM ==================
+// ================== CHECK LOOP ==================
 async function check() {
   const data = loadData();
 
   try {
     const apiData = await getWilayaStatus();
+    if (!Array.isArray(apiData)) return;
 
     for (let id in data.users) {
+
+      if (!data.users[id]) continue;
+
       const userWilaya = data.users[id].wilaya;
       if (!userWilaya) continue;
 
@@ -106,10 +111,7 @@ async function check() {
       if (available && data.last[userWilaya] === "closed") {
         data.last[userWilaya] = "open";
 
-        await send(
-          id,
-          `🚨 فتح التسجيل في ولايتك: ${userWilaya}`
-        );
+        await send(id, `🚨 فتح التسجيل في ولايتك: ${userWilaya}`);
       }
 
       if (!available) {
@@ -131,6 +133,7 @@ app.post("/webhook", async (req, res) => {
   try {
     const update = req.body;
 
+    // ===== MESSAGE =====
     if (update.message) {
       const msg = update.message;
       const chatId = msg.chat.id;
@@ -139,7 +142,6 @@ app.post("/webhook", async (req, res) => {
 
       if (!data.users[chatId]) {
         data.users[chatId] = { wilaya: null };
-        saveData(data);
       }
 
       if (text === "/start") {
@@ -156,8 +158,11 @@ app.post("/webhook", async (req, res) => {
       else {
         await send(chatId, "اكتب /start");
       }
+
+      saveData(data);
     }
 
+    // ===== CALLBACK =====
     if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
       const dataCB = update.callback_query.data;
@@ -184,6 +189,10 @@ app.post("/webhook", async (req, res) => {
       if (dataCB.startsWith("wilaya_")) {
         const w = dataCB.replace("wilaya_", "");
 
+        if (!data.users[chatId]) {
+          data.users[chatId] = { wilaya: null };
+        }
+
         data.users[chatId].wilaya = w;
         saveData(data);
 
@@ -206,4 +215,6 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 Running on", PORT));
 
 // ================== LOOP ==================
-setInterval(check, 60000);
+setInterval(() => {
+  check().catch(console.error);
+}, 60000);
