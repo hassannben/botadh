@@ -1,4 +1,7 @@
 const axios = require("axios");
+const express = require("express");
+
+const app = express();
 
 const TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = "8486232633";
@@ -7,151 +10,182 @@ let lastState = {};
 let lastUpdateId = 0;
 
 const wilayas = [
-  "الجزائر", "وهران", "قسنطينة", "تيبازة",
-  "البليد", "سطيف", "عنابة", "تيزي وزو",
-  "بجاية", "باتنة", "الجلفة", "بسكرة"
+"الجزائر", "وهران", "قسنطينة", "تيبازة",
+"البليدة", "سطيف", "عنابة", "تيزي وزو",
+"بجاية", "باتنة", "الجلفة", "بسكرة"
 ];
 
-// ================== SEND ==================
+// ================= SERVER =================
+app.get("/", (req, res) => {
+res.send("Bot running ✅");
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+console.log(`Server started on ${PORT}`);
+});
+
+// ================= SEND =================
 async function send(chatId, msg) {
-  try {
-    await axios.post(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-      chat_id: chatId,
-      text: msg,
-    });
-  } catch (e) {
-    console.log("send error:", e.message);
-  }
+try {
+await axios.post(
+`https://api.telegram.org/bot${TOKEN}/sendMessage`,
+{
+chat_id: chatId,
+text: msg,
+}
+);
+} catch (e) {
+console.log("send error:", e.response?.data || e.message);
+}
 }
 
-// ================== SCRAPER ==================
+// ================= SCRAPER =================
 async function check() {
-  try {
-    const res = await axios.get("https://adhahi.dz");
-    const html = res.data;
+try {
+const res = await axios.get("https://adhahi.dz", {
+timeout: 10000,
+});
 
-    for (let w of wilayas) {
-      const isAvailable = !html.includes(`${w} — حجز غير متوفر`);
+```
+const html = res.data;
 
-      if (!lastState[w]) lastState[w] = "closed";
+for (let w of wilayas) {
+  const isAvailable =
+    !html.includes(`${w} — حجز غير متوفر`);
 
-      if (isAvailable && lastState[w] === "closed") {
-        lastState[w] = "open";
-        await send(CHAT_ID, `🚨 فتح التسجيل في ولاية: ${w}`);
-        console.log(w, "OPEN");
-      }
+  if (!lastState[w]) {
+    lastState[w] = "closed";
+  }
 
-      if (!isAvailable) {
-        lastState[w] = "closed";
-      }
-    }
-  } catch (e) {
-    console.log("scraper error:", e.message);
+  if (isAvailable && lastState[w] === "closed") {
+    lastState[w] = "open";
+
+    await send(
+      CHAT_ID,
+      `🚨 فتح التسجيل في ولاية: ${w}`
+    );
+
+    console.log(`${w} OPEN`);
+  }
+
+  if (!isAvailable) {
+    lastState[w] = "closed";
   }
 }
+```
 
-// ================== GET UPDATES ==================
+} catch (e) {
+console.log(
+"scraper error:",
+e.response?.data || e.message
+);
+}
+}
+
+// ================= GET UPDATES =================
 async function getUpdates() {
-  const res = await axios.get(
-    `https://api.telegram.org/bot${TOKEN}/getUpdates`,
-    {
-      params: {
-        offset: lastUpdateId + 1,
-        timeout: 10,
-      },
-    }
+try {
+const res = await axios.get(
+`https://api.telegram.org/bot${TOKEN}/getUpdates`,
+{
+params: {
+offset: lastUpdateId + 1,
+timeout: 20,
+},
+}
+);
+
+```
+return res.data.result;
+```
+
+} catch (e) {
+console.log(
+"updates error:",
+e.response?.data || e.message
+);
+
+```
+return [];
+```
+
+}
+}
+
+// ================= HANDLE =================
+async function handleUpdates(updates) {
+for (const update of updates) {
+lastUpdateId = update.update_id;
+
+```
+if (!update.message) continue;
+
+const msg = update.message;
+const text = (msg.text || "").toLowerCase();
+const name = msg.from.first_name || "User";
+const chatId = msg.chat.id;
+
+console.log(`📩 ${name}: ${text}`);
+
+if (text === "/start") {
+  await send(
+    chatId,
+    `👋 مرحبا ${name}\n🤖 بوت مراقبة التسجيل يعمل 24/7`
   );
 
-  return res.data.result;
+  continue;
 }
 
-// ================== SMART HANDLER ==================
-async function handleUpdates(updates) {
-  for (let update of updates) {
-    lastUpdateId = update.update_id;
+if (text === "/wilayas") {
+  await send(
+    chatId,
+    `📍 الولايات:\n${wilayas.join(" • ")}`
+  );
 
-    if (!update.message) continue;
-
-    const msg = update.message;
-    const text = (msg.text || "").toLowerCase();
-    const name = msg.from.first_name || "User";
-    const chatId = msg.chat.id;
-
-    console.log(`📩 ${name}: ${text}`);
-
-    // ================= START =================
-    if (text === "/start") {
-      return send(chatId,
-        `👋 مرحبا ${name}!\n🤖 بوت متابعة التسجيل في الولايات.`
-      );
-    }
-
-    // ================= WILAYAS =================
-    if (text === "/wilayas") {
-      return send(chatId,
-        `📍 الولايات:\n${wilayas.join(" • ")}`
-      );
-    }
-
-    // ================= GREETINGS =================
-    if (["مرحبا", "سلام", "hello", "hi"].some(w => text.includes(w))) {
-      return send(chatId, `👋 أهلا ${name}، مرحبا بك!`);
-    }
-
-    // ================= THANKS =================
-    if (["شكرا", "merci", "thanks"].some(w => text.includes(w))) {
-      return send(chatId, `😊 العفو ${name}!`);
-    }
-
-    // ================= REGISTRATION =================
-    if (text.includes("تسجيل") || text.includes("فتح")) {
-      return send(chatId,
-        `🔔 أنا أراقب فتح التسجيل 24/7.\nوغادي نبلغك مباشرة عند أي ولاية تفتح.`
-      );
-    }
-
-    // ================= BOT INFO =================
-    if (text.includes("بوت") || text.includes("bot")) {
-      return send(chatId,
-        `🤖 أنا بوت ذكي:\n- أراقب موقع adhahi.dz\n- أبلغك عند فتح التسجيل`
-      );
-    }
-
-    // ================= WILAYA QUESTION =================
-    if (text.includes("ولاية")) {
-      return send(chatId,
-        `📍 الولايات المتابعة:\n${wilayas.join(" • ")}`
-      );
-    }
-
-    // ================= HELP =================
-    if (text.includes("كيف") || text.includes("help")) {
-      return send(chatId,
-        `ℹ️ جرب:\n/start\n/wilayas\nأو اطرح أي سؤال`
-      );
-    }
-
-    // ================= DEFAULT =================
-    return send(chatId,
-      `🤔 لم أفهم رسالتك يا ${name}.\nجرب /start أو /wilayas`
-    );
-  }
+  continue;
 }
 
-// ================== MAIN LOOP ==================
-async function runBot() {
-  console.log("🤖 Bot running...");
+if (
+  ["مرحبا", "سلام", "hello", "hi"]
+    .some(w => text.includes(w))
+) {
+  await send(chatId, `👋 أهلا ${name}`);
 
-  setInterval(check, 60000);
-
-  while (true) {
-    try {
-      const updates = await getUpdates();
-      await handleUpdates(updates);
-    } catch (e) {
-      console.log("bot error:", e.message);
-    }
-  }
+  continue;
 }
 
-runBot();
+if (
+  ["شكرا", "merci", "thanks"]
+    .some(w => text.includes(w))
+) {
+  await send(chatId, `😊 العفو ${name}`);
+
+  continue;
+}
+
+await send(
+  chatId,
+  `🤖 الأوامر:\n/start\n/wilayas`
+);
+```
+
+}
+}
+
+// ================= POLLING LOOP =================
+async function poll() {
+const updates = await getUpdates();
+
+if (updates.length > 0) {
+await handleUpdates(updates);
+}
+}
+
+// ================= START =================
+console.log("🤖 Bot running...");
+
+setInterval(check, 60000);
+
+setInterval(poll, 3000);
