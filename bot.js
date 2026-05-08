@@ -32,7 +32,7 @@ const dataFile = "./data.json";
 
 function loadData() {
   if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify({ users: {}, last: {} }));
+    fs.writeFileSync(dataFile, JSON.stringify({ users: {}, last: {} }, null, 2));
   }
   return JSON.parse(fs.readFileSync(dataFile));
 }
@@ -41,7 +41,7 @@ function saveData(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-// ================== SEND MESSAGE ==================
+// ================== TELEGRAM SEND ==================
 async function send(chatId, text, options = {}) {
   try {
     await axios.post(`${API}/sendMessage`, {
@@ -66,65 +66,80 @@ function mainMenu() {
   };
 }
 
-// ================== GET API (SAFE) ==================
+// ================== FETCH API ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
-      timeout: 30000,
+      timeout: 10000,
       headers: {
         "Accept": "application/json",
         "User-Agent": "Mozilla/5.0"
       }
     });
 
-    return res.data || [];
+    return Array.isArray(res.data) ? res.data : [];
   } catch (e) {
     console.log("API error:", e.message);
     return [];
   }
 }
 
-// ================== CHECK LOOP ==================
+// ================== REAL-TIME CHECK ==================
 async function check() {
   const data = loadData();
 
-  try {
-    const apiData = await getWilayaStatus();
-    if (!Array.isArray(apiData)) return;
+  const apiData = await getWilayaStatus();
+  if (!apiData.length) return;
 
-    for (let id in data.users) {
+  console.log("⚡ checking...");
 
-      if (!data.users[id]) continue;
+  for (let id in data.users) {
+    const user = data.users[id];
+    if (!user || !user.wilaya) continue;
 
-      const userWilaya = data.users[id].wilaya;
-      if (!userWilaya) continue;
+    const w = apiData.find(x => x.wilayaNameAr === user.wilaya);
+    if (!w) continue;
 
-      const w = apiData.find(x => x.wilayaNameAr === userWilaya);
-      if (!w) continue;
+    const key = `${id}_${user.wilaya}`;
+    const available = w.available === true;
 
-      const available = w.available;
-
-      if (!data.last[userWilaya]) {
-        data.last[userWilaya] = "closed";
-      }
-
-      if (available && data.last[userWilaya] === "closed") {
-        data.last[userWilaya] = "open";
-
-        await send(id, `🚨 فتح التسجيل في ولايتك: ${userWilaya}`);
-      }
-
-      if (!available) {
-        data.last[userWilaya] = "closed";
-      }
+    if (!data.last[key]) {
+      data.last[key] = "closed";
     }
 
-    saveData(data);
+    // 🚨 فتح التسجيل
+    if (available && data.last[key] === "closed") {
+      data.last[key] = "open";
 
-  } catch (e) {
-    console.log("check error:", e.message);
+      await send(id,
+        `🚨 فتح التسجيل الآن في ولايتك: ${user.wilaya}`
+      );
+    }
+
+    // 🔒 إغلاق
+    if (!available) {
+      data.last[key] = "closed";
+    }
+  }
+
+  saveData(data);
+}
+
+// ================== REAL-TIME LOOP (8s) ==================
+async function startWatcher() {
+  while (true) {
+    try {
+      await check();
+    } catch (e) {
+      console.log("watch error:", e.message);
+    }
+
+    // ⚡ 5–8 ثواني (real-time feeling)
+    await new Promise(r => setTimeout(r, 8000));
   }
 }
+
+startWatcher();
 
 // ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
@@ -133,7 +148,6 @@ app.post("/webhook", async (req, res) => {
   try {
     const update = req.body;
 
-    // ===== MESSAGE =====
     if (update.message) {
       const msg = update.message;
       const chatId = msg.chat.id;
@@ -162,7 +176,6 @@ app.post("/webhook", async (req, res) => {
       saveData(data);
     }
 
-    // ===== CALLBACK =====
     if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
       const dataCB = update.callback_query.data;
@@ -213,8 +226,3 @@ app.get("/", (req, res) => res.send("Bot running"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 Running on", PORT));
-
-// ================== LOOP ==================
-setInterval(() => {
-  check().catch(console.error);
-}, 60000);
