@@ -32,7 +32,7 @@ const dataFile = "./data.json";
 
 function loadData() {
   if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify({ users: {}, last: {} }, null, 2));
+    fs.writeFileSync(dataFile, JSON.stringify({ users: {}, last: {} }));
   }
   return JSON.parse(fs.readFileSync(dataFile));
 }
@@ -41,7 +41,7 @@ function saveData(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-// ================== TELEGRAM SEND ==================
+// ================== SEND ==================
 async function send(chatId, text, options = {}) {
   try {
     await axios.post(`${API}/sendMessage`, {
@@ -66,80 +66,60 @@ function mainMenu() {
   };
 }
 
-// ================== FETCH API ==================
+// ================== GET API ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
-      timeout: 10000,
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0"
-      }
+      timeout: 20000,
+      headers: { Accept: "application/json" }
     });
 
-    return Array.isArray(res.data) ? res.data : [];
+    return res.data || [];
   } catch (e) {
     console.log("API error:", e.message);
     return [];
   }
 }
 
-// ================== REAL-TIME CHECK ==================
+// ================== CHECK LOOP ==================
 async function check() {
   const data = loadData();
-
   const apiData = await getWilayaStatus();
-  if (!apiData.length) return;
 
-  console.log("⚡ checking...");
+  if (!Array.isArray(apiData)) return;
 
-  for (let id in data.users) {
-    const user = data.users[id];
-    if (!user || !user.wilaya) continue;
+  for (let userId in data.users) {
+    const user = data.users[userId];
+    if (!user) continue;
 
-    const w = apiData.find(x => x.wilayaNameAr === user.wilaya);
-    if (!w) continue;
+    const selected = user.wilayas || [];
 
-    const key = `${id}_${user.wilaya}`;
-    const available = w.available === true;
+    for (let wName of selected) {
+      const w = apiData.find(x => x.wilayaNameAr === wName);
+      if (!w) continue;
 
-    if (!data.last[key]) {
-      data.last[key] = "closed";
-    }
+      const available = w.available;
 
-    // 🚨 فتح التسجيل
-    if (available && data.last[key] === "closed") {
-      data.last[key] = "open";
+      if (!data.last[userId]) data.last[userId] = {};
+      if (!data.last[userId][wName]) data.last[userId][wName] = "closed";
 
-      await send(id,
-        `🚨 فتح التسجيل الآن في ولايتك: ${user.wilaya}`
-      );
-    }
+      if (available && data.last[userId][wName] === "closed") {
+        data.last[userId][wName] = "open";
 
-    // 🔒 إغلاق
-    if (!available) {
-      data.last[key] = "closed";
+        await send(
+          userId,
+          `🚨 فتح التسجيل في: ${wName}`
+        );
+      }
+
+      if (!available) {
+        data.last[userId][wName] = "closed";
+      }
     }
   }
 
   saveData(data);
 }
-
-// ================== REAL-TIME LOOP (8s) ==================
-async function startWatcher() {
-  while (true) {
-    try {
-      await check();
-    } catch (e) {
-      console.log("watch error:", e.message);
-    }
-
-    // ⚡ 5–8 ثواني (real-time feeling)
-    await new Promise(r => setTimeout(r, 8000));
-  }
-}
-
-startWatcher();
 
 // ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
@@ -148,6 +128,7 @@ app.post("/webhook", async (req, res) => {
   try {
     const update = req.body;
 
+    // ===== MESSAGE =====
     if (update.message) {
       const msg = update.message;
       const chatId = msg.chat.id;
@@ -155,7 +136,7 @@ app.post("/webhook", async (req, res) => {
       const name = msg.from.first_name || "User";
 
       if (!data.users[chatId]) {
-        data.users[chatId] = { wilaya: null };
+        data.users[chatId] = { wilayas: [] };
       }
 
       if (text === "/start") {
@@ -169,47 +150,52 @@ app.post("/webhook", async (req, res) => {
         await send(chatId, wilayas.join(" • "));
       }
 
-      else {
-        await send(chatId, "اكتب /start");
-      }
-
       saveData(data);
     }
 
+    // ===== CALLBACK =====
     if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
-      const dataCB = update.callback_query.data;
+      const cb = update.callback_query.data;
 
       await axios.post(`${API}/answerCallbackQuery`, {
         callback_query_id: update.callback_query.id
       });
 
-      if (dataCB === "choose") {
-        const buttons = wilayas.map(w => [{
+      // ALL WILAYAS
+      if (cb === "all") {
+        data.users[chatId] = { wilayas: [...wilayas] };
+
+        await send(chatId, "✅ تم تفعيل كل الولايات");
+        saveData(data);
+      }
+
+      // CHOOSE ONE
+      if (cb === "choose") {
+        const buttons = wilayas.map(w => ([{
           text: w,
           callback_data: `wilaya_${w}`
-        }]);
+        }]));
 
         await send(chatId, "📍 اختر ولايتك:", {
           reply_markup: { inline_keyboard: buttons }
         });
       }
 
-      if (dataCB === "all") {
-        await send(chatId, wilayas.join(" • "));
-      }
-
-      if (dataCB.startsWith("wilaya_")) {
-        const w = dataCB.replace("wilaya_", "");
+      // SELECT WILAYA
+      if (cb.startsWith("wilaya_")) {
+        const w = cb.replace("wilaya_", "");
 
         if (!data.users[chatId]) {
-          data.users[chatId] = { wilaya: null };
+          data.users[chatId] = { wilayas: [] };
         }
 
-        data.users[chatId].wilaya = w;
-        saveData(data);
+        if (!data.users[chatId].wilayas.includes(w)) {
+          data.users[chatId].wilayas.push(w);
+        }
 
         await send(chatId, `✅ تم اختيار: ${w}`);
+        saveData(data);
       }
     }
 
@@ -226,3 +212,8 @@ app.get("/", (req, res) => res.send("Bot running"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 Running on", PORT));
+
+// ================== LOOP ==================
+setInterval(() => {
+  check().catch(console.error);
+}, 30000); // كل 30 ثانية إشعار أسرع
