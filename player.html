@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>📺 IPTV Player</title>
+
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-family: Arial;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+    }
+
+    video {
+      width: 100%;
+      height: auto;
+      background: black;
+      border-radius: 10px;
+    }
+
+    .title {
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="title">📺 بث مباشر</div>
+
+  <video id="video" controls autoplay></video>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+<script>
+  const video = document.getElementById('video');
+
+  const streamURL = "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
+
+  if (Hls.isSupported()) {
+    const hls = new Hls();
+    hls.loadSource(streamURL);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, function () {
+      video.play();
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = streamURL;
+    video.addEventListener('loadedmetadata', function () {
+      video.play();
+    });
+  } else {
+    alert("المتصفح لا يدعم تشغيل البث");
+  }
+</script>
+
+</body>
+</html>
