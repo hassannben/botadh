@@ -8,19 +8,21 @@ let lastUpdateId = 0;
 
 const wilayas = [
   "الجزائر", "وهران", "قسنطينة", "تيبازة",
-  "البليدة", "سطيف", "عنابة", "تيزي وزو",
+  "البليد", "سطيف", "عنابة", "تيزي وزو",
   "بجاية", "باتنة", "الجلفة", "بسكرة"
 ];
 
-
-// ================== SEND MESSAGE ==================
+// ================== SEND ==================
 async function send(chatId, msg) {
-  await axios.post(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-    chat_id: chatId,
-    text: msg,
-  });
+  try {
+    await axios.post(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+      chat_id: chatId,
+      text: msg,
+    });
+  } catch (e) {
+    console.log("send error:", e.message);
+  }
 }
-
 
 // ================== SCRAPER ==================
 async function check() {
@@ -48,8 +50,7 @@ async function check() {
   }
 }
 
-
-// ================== BOT UPDATES ==================
+// ================== GET UPDATES ==================
 async function getUpdates() {
   const res = await axios.get(
     `https://api.telegram.org/bot${TOKEN}/getUpdates`,
@@ -60,9 +61,11 @@ async function getUpdates() {
       },
     }
   );
+
   return res.data.result;
 }
 
+// ================== SMART HANDLER ==================
 async function handleUpdates(updates) {
   for (let update of updates) {
     lastUpdateId = update.update_id;
@@ -76,49 +79,71 @@ async function handleUpdates(updates) {
 
     console.log(`📩 ${name}: ${text}`);
 
-    // ===== COMMANDS =====
+    // ================= START =================
     if (text === "/start") {
-      return send(chatId, `👋 مرحبا ${name}!\nأنا بوت متابعة التسجيل في الولايات.`);
+      return send(chatId,
+        `👋 مرحبا ${name}!\n🤖 بوت متابعة التسجيل في الولايات.`
+      );
     }
 
+    // ================= WILAYAS =================
     if (text === "/wilayas") {
-      return send(chatId, `📍 الولايات المتابعة:\n${wilayas.join(" • ")}`);
+      return send(chatId,
+        `📍 الولايات:\n${wilayas.join(" • ")}`
+      );
     }
 
-    if (text.includes("مرحبا") || text.includes("سلام")) {
-      return send(chatId, `👋 أهلا ${name}، كيف حالك؟`);
+    // ================= GREETINGS =================
+    if (["مرحبا", "سلام", "hello", "hi"].some(w => text.includes(w))) {
+      return send(chatId, `👋 أهلا ${name}، مرحبا بك!`);
     }
 
-    if (text.includes("شكرا") || text.includes("merci")) {
+    // ================= THANKS =================
+    if (["شكرا", "merci", "thanks"].some(w => text.includes(w))) {
       return send(chatId, `😊 العفو ${name}!`);
     }
 
+    // ================= REGISTRATION =================
     if (text.includes("تسجيل") || text.includes("فتح")) {
-      return send(chatId, `🔔 أنا أراقب فتح التسجيل تلقائياً، وسأخبرك فوراً.`);
+      return send(chatId,
+        `🔔 أنا أراقب فتح التسجيل 24/7.\nوغادي نبلغك مباشرة عند أي ولاية تفتح.`
+      );
     }
 
+    // ================= BOT INFO =================
     if (text.includes("بوت") || text.includes("bot")) {
-      return send(chatId, `🤖 نعم أنا بوت ذكي لمتابعة تحديثات الولايات.`);
+      return send(chatId,
+        `🤖 أنا بوت ذكي:\n- أراقب موقع adhahi.dz\n- أبلغك عند فتح التسجيل`
+      );
     }
 
-    if (text.includes("واش") || text.includes("what")) {
-      return send(chatId, `❓ أنا بوت لمراقبة موقع adhahi.dz وإشعارك عند فتح التسجيل.`);
+    // ================= WILAYA QUESTION =================
+    if (text.includes("ولاية")) {
+      return send(chatId,
+        `📍 الولايات المتابعة:\n${wilayas.join(" • ")}`
+      );
     }
 
-    // ===== DEFAULT =====
-    return send(chatId, `🤔 لم أفهم الرسالة، جرب /start أو /wilayas`);
+    // ================= HELP =================
+    if (text.includes("كيف") || text.includes("help")) {
+      return send(chatId,
+        `ℹ️ جرب:\n/start\n/wilayas\nأو اطرح أي سؤال`
+      );
+    }
+
+    // ================= DEFAULT =================
+    return send(chatId,
+      `🤔 لم أفهم رسالتك يا ${name}.\nجرب /start أو /wilayas`
+    );
   }
 }
-
 
 // ================== MAIN LOOP ==================
 async function runBot() {
   console.log("🤖 Bot running...");
 
-  // scraper كل دقيقة
   setInterval(check, 60000);
 
-  // bot listener (polling)
   while (true) {
     try {
       const updates = await getUpdates();
