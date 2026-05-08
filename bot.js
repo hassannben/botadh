@@ -70,21 +70,43 @@ async function handleUpdates(updates) {
     if (!update.message) continue;
 
     const msg = update.message;
-    const text = msg.text || "";
+    const text = (msg.text || "").toLowerCase();
     const name = msg.from.first_name || "User";
     const chatId = msg.chat.id;
 
     console.log(`📩 ${name}: ${text}`);
 
+    // ===== COMMANDS =====
     if (text === "/start") {
-      await send(chatId, `👋 مرحبا ${name}!\nالبوت يعمل بنجاح.`);
-    } 
-    else if (text === "/wilayas") {
-      await send(chatId, `📍 Wilayas:\n${wilayas.join(", ")}`);
-    } 
-    else {
-      await send(chatId, `📨 ${name}: ${text}`);
+      return send(chatId, `👋 مرحبا ${name}!\nأنا بوت متابعة التسجيل في الولايات.`);
     }
+
+    if (text === "/wilayas") {
+      return send(chatId, `📍 الولايات المتابعة:\n${wilayas.join(" • ")}`);
+    }
+
+    if (text.includes("مرحبا") || text.includes("سلام")) {
+      return send(chatId, `👋 أهلا ${name}، كيف حالك؟`);
+    }
+
+    if (text.includes("شكرا") || text.includes("merci")) {
+      return send(chatId, `😊 العفو ${name}!`);
+    }
+
+    if (text.includes("تسجيل") || text.includes("فتح")) {
+      return send(chatId, `🔔 أنا أراقب فتح التسجيل تلقائياً، وسأخبرك فوراً.`);
+    }
+
+    if (text.includes("بوت") || text.includes("bot")) {
+      return send(chatId, `🤖 نعم أنا بوت ذكي لمتابعة تحديثات الولايات.`);
+    }
+
+    if (text.includes("واش") || text.includes("what")) {
+      return send(chatId, `❓ أنا بوت لمراقبة موقع adhahi.dz وإشعارك عند فتح التسجيل.`);
+    }
+
+    // ===== DEFAULT =====
+    return send(chatId, `🤔 لم أفهم الرسالة، جرب /start أو /wilayas`);
   }
 }
 
