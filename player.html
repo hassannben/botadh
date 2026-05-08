@@ -1,48 +1,1009 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-  <meta charset="UTF-8" />
-  <title>TV Player</title>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>BEIN SPORTS PRO | بث مباشر فائق الجودة</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
+        body {
+            background: radial-gradient(circle at 20% 30%, #0a0f1a, #03060c);
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            padding: 1rem;
+            position: relative;
+        }
 
-    video {
-      width: 100%;
-      max-width: 900px;
-      background: black;
-    }
-  </style>
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(30, 80, 120, 0.08) 0%, transparent 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-layout {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .channels-sidebar {
+            flex: 0 0 320px;
+            background: rgba(10, 15, 26, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 28px;
+            padding: 1.2rem;
+            border: 1px solid rgba(100, 150, 220, 0.3);
+            height: fit-content;
+            max-height: calc(100vh - 2rem);
+            overflow-y: auto;
+            position: sticky;
+            top: 1rem;
+        }
+
+        .channels-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .channels-sidebar::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        .channels-sidebar::-webkit-scrollbar-thumb {
+            background: #2c5a7a;
+            border-radius: 10px;
+        }
+
+        .sidebar-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #d6e6ff;
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.7rem;
+            border-bottom: 2px solid rgba(100, 150, 220, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-title span {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .channel-count {
+            background: #2c5a7a;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            color: white;
+        }
+
+        .channels-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .channel-card {
+            background: linear-gradient(135deg, rgba(30, 40, 60, 0.8), rgba(20, 28, 45, 0.85));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(100, 150, 220, 0.3);
+            border-radius: 18px;
+            padding: 0.9rem 1rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .channel-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(100, 150, 220, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .channel-card:hover::before {
+            left: 100%;
+        }
+
+        .channel-card:hover {
+            transform: translateX(5px);
+            border-color: #5f9eff;
+            box-shadow: 0 8px 20px rgba(0, 100, 200, 0.3);
+        }
+
+        .channel-card.active {
+            background: linear-gradient(135deg, #2c5a7a, #1a3a5a);
+            border-color: #7ab3ff;
+            box-shadow: 0 0 15px rgba(90, 160, 255, 0.4);
+            transform: translateX(5px);
+        }
+
+        .channel-icon {
+            width: 45px;
+            height: 45px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+
+        .channel-info {
+            flex: 1;
+        }
+
+        .channel-info h3 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .channel-info p {
+            font-size: 0.65rem;
+            color: #9ab3d9;
+        }
+
+        .live-tag {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: #ff3a3a;
+            color: white;
+            font-size: 0.6rem;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 20px;
+            animation: pulse 1.5s infinite;
+        }
+
+        .player-area {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        /* حاوية المشغل مع مساحة إضافية */
+        .player-wrapper {
+            background: #000000cc;
+            border-radius: 28px;
+            padding: 12px;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            border: 1px solid rgba(100, 150, 220, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .player-wrapper:hover {
+            border-color: rgba(100, 150, 220, 0.8);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+        }
+
+        .video-container {
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            background: #000;
+            cursor: pointer;
+        }
+
+        video {
+            width: 100%;
+            display: block;
+            aspect-ratio: 16 / 9;
+            object-fit: contain;
+            cursor: pointer;
+        }
+
+        /* زر كتم الصوت العلوي - فوق المشغل مباشرة */
+        .mute-top-bar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 12px;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .mute-button-large {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(100, 150, 220, 0.6);
+            border-radius: 60px;
+            padding: 10px 24px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-family: inherit;
+        }
+
+        .mute-button-large i {
+            font-size: 1.2rem;
+        }
+
+        .mute-button-large:hover {
+            background: #2c5a7a;
+            border-color: #7ab3ff;
+            transform: scale(1.02);
+            box-shadow: 0 6px 16px rgba(0,160,255,0.3);
+        }
+
+        .mute-button-large:active {
+            transform: scale(0.98);
+        }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: 0.3s;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(100, 150, 220, 0.3);
+            border-top: 3px solid #5f9eff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 0.8rem;
+            color: #bfd6ff;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-panel {
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(12px);
+            border-radius: 50px;
+            padding: 0.7rem 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 1rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .status-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 58, 58, 0.15);
+            padding: 4px 12px;
+            border-radius: 40px;
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background: #ff3a3a;
+            border-radius: 50%;
+            box-shadow: 0 0 6px #ff3a3a;
+            animation: pulse 1.2s infinite;
+        }
+
+        .live-text {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #ff6b6b;
+            letter-spacing: 1px;
+        }
+
+        .viewers-counter {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0,0,0,0.5);
+            padding: 4px 12px;
+            border-radius: 40px;
+        }
+
+        .viewers-counter i {
+            color: #ffd700;
+            font-size: 0.75rem;
+        }
+
+        .viewers-count {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #ffd700;
+            direction: ltr;
+            display: inline-block;
+            min-width: 60px;
+            transition: transform 0.2s ease;
+        }
+
+        .viewers-label {
+            font-size: 0.7rem;
+            color: #9ab3d9;
+        }
+
+        .status-text {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #d6e6ff;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .control-btn {
+            background: rgba(30, 40, 60, 0.8);
+            border: none;
+            color: #bfd6ff;
+            padding: 6px 16px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .control-btn:hover {
+            background: #2c5a7a;
+            color: white;
+            transform: scale(1.02);
+        }
+
+        .toast-notification {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(12px);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+            transform: translateX(150%);
+            transition: transform 0.3s ease;
+            border-left: 4px solid #5f9eff;
+            font-size: 0.8rem;
+        }
+
+        .toast-notification.show {
+            transform: translateX(0);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1);}
+            50% { opacity: 0.5; transform: scale(1.1);}
+        }
+
+        @media (max-width: 1024px) {
+            .main-layout { flex-direction: column; }
+            .channels-sidebar {
+                flex: auto;
+                width: 100%;
+                max-height: none;
+                position: static;
+                margin-bottom: 1rem;
+            }
+            .channels-list {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+                gap: 10px;
+            }
+            .channel-card:hover { transform: translateY(-3px); }
+            .channel-card.active { transform: translateX(0); }
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 0.8rem; }
+            .main-layout { flex-direction: column; }
+            .player-area { order: 1; margin-bottom: 1rem; }
+            .channels-sidebar {
+                order: 2;
+                margin-bottom: 0;
+                max-height: 400px;
+                overflow-y: auto;
+            }
+            .channels-list { grid-template-columns: 1fr; }
+            .status-panel { flex-direction: column; align-items: stretch; }
+            .status-left { justify-content: center; }
+            .control-buttons { justify-content: center; }
+            .toast-notification { bottom: 20px; right: 20px; left: 20px; transform: translateY(150%);}
+            .toast-notification.show { transform: translateY(0);}
+            .control-btn { padding: 8px 20px; font-size: 0.85rem; }
+            .sidebar-title { font-size: 1rem; margin-bottom: 0.8rem; }
+            .channel-card { padding: 0.7rem 0.9rem; }
+            .channel-icon { width: 40px; height: 40px; font-size: 1.1rem; }
+            .channel-info h3 { font-size: 0.85rem; }
+            .mute-button-large { padding: 8px 18px; font-size: 0.8rem; }
+            .mute-top-bar { margin-bottom: 8px; }
+        }
+        
+        @media (max-width: 480px) {
+            .player-wrapper { padding: 8px; }
+            .control-btn { padding: 6px 14px; font-size: 0.75rem; }
+            .status-text { font-size: 0.7rem; }
+            .mute-button-large { padding: 7px 16px; font-size: 0.75rem; }
+        }
+    </style>
 </head>
-
 <body>
 
-<video id="video" controls autoplay></video>
+<div class="container">
+    <div class="main-layout">
+        <div class="channels-sidebar">
+            <div class="sidebar-title">
+                <span><i class="fas fa-list-ul"></i> القنوات الرياضية</span>
+                <span class="channel-count">3 قنوات</span>
+            </div>
+            <div class="channels-list">
+                <div class="channel-card" data-url="https://stm.linkip.org/live/1952_.m3u8" data-name="BEIN SPORTS NEWS" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-newspaper"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS NEWS</h3>
+                        <p>آخر الأخبار الرياضية • 24/7</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD1</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_2_HD/index.m3u8" data-name="BEIN SPORTS HD2" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-trophy"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD2</h3>
+                        <p>بث احتياطي • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_3_HD/index.m3u8" data-name="BEIN SPORTS HD3" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD3</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_4_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD4</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_5_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD5</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_6_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD6</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_7_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD7</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_8_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD8</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="channel-card" data-url="https://sr1.oz-tv.xyz/s1/b_9_HD/index.m3u8" data-name="BEIN SPORTS HD1" data-quality="HD">
+                    <div class="channel-icon"><i class="fas fa-star"></i></div>
+                    <div class="channel-info">
+                        <h3>BEIN SPORTS HD9</h3>
+                        <p>أفضل المباريات • جودة عالية</p>
+                    </div>
+                    <div class="live-tag">LIVE</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="player-area">
+            <div class="player-wrapper">
+                <!-- شريط علوي يحتوي على زر كتم الصوت - فوق المشغل مباشرة (تم وضعه قبل حاوية الفيديو) -->
+                <div class="mute-top-bar">
+                    <button class="mute-button-large" id="topMuteBtn">
+                        <i class="fas fa-volume-up"></i>
+                        <span id="muteBtnText"> </span>
+                    </button>
+                </div>
+                <div class="video-container" id="videoContainer">
+                    <video id="videoPlayer" playsinline autoplay muted poster="https://images.pexels.com/photos/28659512/pexels-photo-28659512.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2"></video>
+                    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                        <div class="loader"></div>
+                        <div class="loading-text">جاري تحميل البث المباشر...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-panel">
+                <div class="status-left">
+                    <div class="live-indicator">
+                        <div class="pulse-dot"></div>
+                        <span class="live-text">LIVE</span>
+                    </div>
+                    <div class="viewers-counter">
+                        <i class="fas fa-eye"></i>
+                        <span class="viewers-count" id="viewersCount">1,247</span>
+                        <span class="viewers-label">مشاهد الآن</span>
+                    </div>
+                    <span class="status-text" id="statusMessage">✅ جاهز • اختر القناة المفضلة</span>
+                </div>
+                <div class="control-buttons">
+                    <button class="control-btn" id="fullscreenBtn"><i class="fas fa-expand"></i> </button>
+                    <button class="control-btn" id="reloadBtn"><i class="fas fa-sync-alt"></i></button>
+                    <!-- زر الكتم في شريط التحكم السفلي اختياري، لكننا نحتفظ به للتوافق ولكن نجعله متزامن مع الزر العلوي -->
+                    <button class="control-btn" id="volumeBtn"><i class="fas fa-volume-up"></i> </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast-notification">
+    <i class="fas fa-info-circle"></i>
+    <span id="toastMessage"></span>
+</div>
 
 <script>
-const video = document.getElementById("video");
-const url = "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
+    // عداد المشاهدين - تحديث تلقائي
+    let viewersInterval = null;
+    let currentViewers = 1247;
+    
+    function updateViewersCount() {
+        const change = Math.floor(Math.random() * 61) - 30;
+        let newViewers = currentViewers + change;
+        if (newViewers < 300) newViewers = 300;
+        if (newViewers > 8000) newViewers = 8000;
+        currentViewers = newViewers;
+        const formattedNumber = currentViewers.toLocaleString('en-US');
+        const viewersSpan = document.getElementById('viewersCount');
+        if (viewersSpan) {
+            viewersSpan.style.transform = 'scale(1.05)';
+            viewersSpan.textContent = formattedNumber;
+            setTimeout(() => {
+                viewersSpan.style.transform = 'scale(1)';
+            }, 200);
+        }
+    }
+    
+    function startViewersCounter() {
+        if (viewersInterval) clearInterval(viewersInterval);
+        viewersInterval = setInterval(updateViewersCount, 10000);
+    }
 
-if (Hls.isSupported()) {
-  const hls = new Hls();
-  hls.loadSource(url);
-  hls.attachMedia(video);
-  hls.on(Hls.Events.MANIFEST_PARSED, () => {
-    video.play();
-  });
-} else {
-  video.src = url;
-  video.play();
-}
+    const video = document.getElementById('videoPlayer');
+    const statusSpan = document.getElementById('statusMessage');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
+    
+    let hls = null;
+    let currentUrl = '';
+    let currentChannelName = '';
+    let retryCount = 0;
+    const MAX_RETRIES = 2;
+
+    // ========== وظيفة الكتم الموحدة ==========
+    let isMuted = true;  // نبدأ بـ Muted لأن autoplay مع muted مطلوب للمتصفحات الحديثة، لكن الزر يعكس الحالة
+    // نزامن العناصر: زر علوي + زر سفلي + حالة الفيديو
+    const topMuteBtn = document.getElementById('topMuteBtn');
+    const bottomVolumeBtn = document.getElementById('volumeBtn');
+    const muteBtnTextSpan = document.getElementById('muteBtnText');
+    
+    function syncMuteUI() {
+        // تحديث أيقونات ونصوص الأزرار بناءً على isMuted والفيديو
+        if (video.muted !== isMuted) {
+            video.muted = isMuted;
+        }
+        if (isMuted) {
+            // الفيديو مكتوم
+            if (topMuteBtn) {
+                topMuteBtn.innerHTML = '<i class="fas fa-volume-mute"></i><span id="muteBtnText">إلغاء الكتم</span>';
+                const newSpan = topMuteBtn.querySelector('#muteBtnText');
+                if (newSpan) newSpan.innerText = '';
+            }
+            if (bottomVolumeBtn) bottomVolumeBtn.innerHTML = '<i class="fas fa-volume-mute"></i> ';
+        } else {
+            if (topMuteBtn) {
+                topMuteBtn.innerHTML = '<i class="fas fa-volume-up"></i><span id="muteBtnText"></span>';
+                const newSpan = topMuteBtn.querySelector('#muteBtnText');
+                if (newSpan) newSpan.innerText = '';
+            }
+            if (bottomVolumeBtn) bottomVolumeBtn.innerHTML = '<i class="fas fa-volume-up"></i> ';
+        }
+    }
+    
+    function toggleMute() {
+        if (video.muted) {
+            video.muted = false;
+            isMuted = false;
+            showToast('🔊', false);
+        } else {
+            video.muted = true;
+            isMuted = true;
+            showToast('🔇', false);
+        }
+        syncMuteUI();
+    }
+    
+    // ربط الأزرار بوظيفة الكتم
+    if (topMuteBtn) topMuteBtn.addEventListener('click', toggleMute);
+    if (bottomVolumeBtn) bottomVolumeBtn.addEventListener('click', toggleMute);
+    
+    function showToast(message, isError = false) {
+        toastMessage.textContent = message;
+        toast.classList.add('show');
+        if (isError) {
+            toast.style.borderLeftColor = '#ff6b6b';
+            toast.querySelector('i').style.color = '#ff6b6b';
+        } else {
+            toast.style.borderLeftColor = '#5f9eff';
+            toast.querySelector('i').style.color = '#5f9eff';
+        }
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3500);
+    }
+
+    function updateStatus(msg, isLoading = false, isError = false) {
+        statusSpan.innerHTML = msg;
+        if (isLoading) {
+            loadingOverlay.style.display = 'flex';
+        } else {
+            loadingOverlay.style.display = 'none';
+        }
+        if (isError) {
+            statusSpan.style.color = '#ffb5a0';
+            showToast(msg, true);
+        } else {
+            statusSpan.style.color = '#d6e6ff';
+        }
+    }
+
+    function saveLastChannel(url, name) {
+        localStorage.setItem('lastChannelUrl', url);
+        localStorage.setItem('lastChannelName', name);
+    }
+
+    function destroyHls() {
+        if (hls) {
+            try {
+                hls.destroy();
+            } catch(e) {}
+            hls = null;
+        }
+    }
+
+    function playStream(url, channelName, quality = 'HD', isAutoPlay = false) {
+        if (!url) {
+            updateStatus('❌ رابط البث غير صالح', false, true);
+            return;
+        }
+
+        if (currentUrl === url && !isAutoPlay) {
+            showToast(`✅ ${channelName} يعمل بالفعل`, false);
+            return;
+        }
+
+        destroyHls();
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        
+        currentUrl = url;
+        currentChannelName = channelName;
+        retryCount = 0;
+        
+        updateStatus(`📡 جاري تجهيز ${channelName} ...`, true);
+        
+        saveLastChannel(url, channelName);
+        
+        // مهم: عند تحميل قناة جديدة نحافظ على حالة الصوت المختارة من المستخدم (لا نغيرها)
+        // لكن الفيديو الجديد قد يبدأ muted بسبب المتصفح للـ autoplay، لكننا نطبق isMuted الحالية لاحقاً بعد التحميل
+        const currentMuteState = isMuted;
+        
+        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = url;
+            
+            const handleMetadata = () => {
+                updateStatus(`✅ ${channelName} جاهز للتشغيل`, false);
+                video.muted = currentMuteState;
+                isMuted = currentMuteState;
+                syncMuteUI();
+                video.play().catch(e => {
+                    updateStatus(`🔘 ${channelName} (اضغط زر التشغيل)`, false);
+                });
+                video.removeEventListener('loadedmetadata', handleMetadata);
+            };
+            
+            video.addEventListener('loadedmetadata', handleMetadata);
+            video.addEventListener('error', () => {
+                updateStatus(`❌ فشل تشغيل ${channelName}`, false, true);
+            });
+        }
+        else if (Hls && Hls.isSupported()) {
+            hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                maxBufferLength: 30,
+                maxMaxBufferLength: 60,
+                manifestLoadingTimeOut: 15000,
+                manifestLoadingMaxRetry: 3,
+                levelLoadingTimeOut: 10000,
+                startLevel: -1,
+                capLevelToPlayerSize: true,
+                debug: false
+            });
+            
+            hls.attachMedia(video);
+            
+            hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                hls.loadSource(url);
+            });
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                updateStatus(`🔴 LIVE • ${channelName} يعمل الآن`, false);
+                video.muted = currentMuteState;
+                isMuted = currentMuteState;
+                syncMuteUI();
+                video.play().catch(() => {
+                    if (!isAutoPlay) {
+                        updateStatus(`⏸ ${channelName} جاهز (اضغط تشغيل)`, false);
+                    }
+                });
+            });
+            
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    let errorMsg = '';
+                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                        errorMsg = `خطأ في الشبكة لـ ${channelName}`;
+                        if (retryCount < MAX_RETRIES) {
+                            retryCount++;
+                            updateStatus(`🔄 محاولة إعادة الاتصال (${retryCount}/${MAX_RETRIES})...`, true);
+                            setTimeout(() => {
+                                playStream(url, channelName, quality);
+                            }, 2000);
+                            return;
+                        }
+                    } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                        errorMsg = `خطأ في تنسيق الفيديو لـ ${channelName}`;
+                        if (hls) hls.recoverMediaError();
+                    } else {
+                        errorMsg = `فشل تشغيل ${channelName}`;
+                    }
+                    
+                    updateStatus(`❌ ${errorMsg}`, false, true);
+                    destroyHls();
+                } else {
+                    updateStatus(`⚠️ إعادة محاولة...`, true);
+                }
+            });
+        } else {
+            updateStatus('❌ المتصفح غير مدعوم', false, true);
+            showToast('يرجى استخدام Chrome أو Edge أو Safari', true);
+        }
+    }
+
+    function enterFullscreen(element) {
+        if (element.requestFullscreen) {
+            element.requestFullscreen();
+            showToast('⛶ وضع ملء الشاشة', false);
+        } else if (element.webkitRequestFullscreen) {
+            element.webkitRequestFullscreen();
+            showToast('⛶ وضع ملء الشاشة', false);
+        } else if (element.msRequestFullscreen) {
+            element.msRequestFullscreen();
+            showToast('⛶ وضع ملء الشاشة', false);
+        }
+    }
+
+    // دعم الضغط المزدوج على الفيديو
+    const videoContainer = document.getElementById('videoContainer');
+    if (videoContainer) {
+        videoContainer.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            enterFullscreen(videoContainer);
+        });
+    }
+    video.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        enterFullscreen(videoContainer);
+    });
+
+    // الضغط المزدوج على القناة لتكبير الشاشة
+    let lastClickTime = 0;
+    let lastClickedCard = null;
+    const channelCards = document.querySelectorAll('.channel-card');
+    channelCards.forEach(card => {
+        card.addEventListener('click', (e) => {
+            const url = card.getAttribute('data-url');
+            const name = card.getAttribute('data-name');
+            const now = Date.now();
+            
+            if (lastClickedCard === card && (now - lastClickTime) < 300) {
+                e.preventDefault();
+                e.stopPropagation();
+                enterFullscreen(videoContainer);
+                showToast(`⛶ ملء الشاشة | ${name}`, false);
+                lastClickTime = 0;
+                lastClickedCard = null;
+                return;
+            }
+            
+            lastClickTime = now;
+            lastClickedCard = card;
+            
+            if (currentUrl === url) {
+                showToast(`✅ ${name} يعمل بالفعل`, false);
+                return;
+            }
+            
+            channelCards.forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            const quality = card.getAttribute('data-quality');
+            playStream(url, name, quality, false);
+            showToast(`🔄 التبديل إلى ${name}`, false);
+        });
+    });
+
+    setInterval(() => {
+        if (lastClickTime && (Date.now() - lastClickTime) > 400) {
+            lastClickTime = 0;
+            lastClickedCard = null;
+        }
+    }, 500);
+
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+        enterFullscreen(videoContainer);
+    });
+
+    document.getElementById('reloadBtn').addEventListener('click', () => {
+        if (currentUrl) {
+            playStream(currentUrl, currentChannelName, 'HD', false);
+            showToast('🔄 إعادة تحميل البث', false);
+        } else {
+            showToast('⚠️ لا يوجد بث نشط', true);
+        }
+    });
+
+    startViewersCounter();
+
+    // تشغيل القناة الأولى تلقائياً
+    setTimeout(() => {
+        const firstChannel = document.querySelector('.channel-card');
+        if (firstChannel) {
+            const url = firstChannel.getAttribute('data-url');
+            const name = firstChannel.getAttribute('data-name');
+            const quality = firstChannel.getAttribute('data-quality');
+            channelCards.forEach(c => c.classList.remove('active'));
+            firstChannel.classList.add('active');
+            // بداية يكون مكتوماً (للامتثال autoplay)
+            video.muted = true;
+            isMuted = true;
+            syncMuteUI();
+            playStream(url, name, quality, true);
+            showToast(`🎬 تشغيل ${name} تلقائياً`, false);
+        }
+    }, 500);
+
+    // إضافة مفاتيح التحكم
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (video.paused) {
+                video.play();
+                showToast('▶ تشغيل', false);
+            } else {
+                video.pause();
+                showToast('⏸ إيقاف مؤقت', false);
+            }
+        } else if (e.code === 'KeyF') {
+            e.preventDefault();
+            enterFullscreen(videoContainer);
+        } else if (e.code === 'KeyM') {
+            e.preventDefault();
+            toggleMute();
+        } else if (e.code === 'Escape') {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                showToast('⛶ خروج من ملء الشاشة', false);
+            }
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (hls) hls.destroy();
+        if (viewersInterval) clearInterval(viewersInterval);
+    });
 </script>
-
 </body>
 </html>
