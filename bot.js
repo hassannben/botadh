@@ -2,7 +2,7 @@ const express = require("express");
 const axios = require("axios");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 const TOKEN = process.env.BOT_TOKEN;
 
@@ -43,14 +43,16 @@ timeout: 10000
 const html = res.data;
 
 for (let w of wilayas) {
-  const isAvailable = !html.includes(`${w} — حجز غير متوفر`);
+
+  // ✔️ FIXED (no template string issues)
+  const isAvailable = !html.includes(w + " — حجز غير متوفر");
 
   if (!lastState[w]) lastState[w] = "closed";
 
   if (isAvailable && lastState[w] === "closed") {
     lastState[w] = "open";
 
-    console.log(`${w} OPEN`);
+    console.log(`🚨 ${w} OPEN`);
   }
 
   if (!isAvailable) {
@@ -64,7 +66,7 @@ console.log("scraper error:", e.message);
 }
 }
 
-// ================== TELEGRAM WEBHOOK ==================
+// ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
 try {
 const message = req.body.message;
@@ -114,7 +116,7 @@ res.sendStatus(200);
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-console.log("Bot running on port", PORT);
+console.log("🚀 Bot running on port", PORT);
 });
 
 // ================== LOOP SCRAPER ==================
