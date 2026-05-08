@@ -2,26 +2,22 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>IPTV</title>
+  <title>TV Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
   <style>
-    html, body {
+    body {
       margin: 0;
-      padding: 0;
       background: black;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
     }
 
     video {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
+      width: 100%;
+      max-width: 900px;
       background: black;
     }
   </style>
@@ -29,53 +25,23 @@
 
 <body>
 
-<video id="video" autoplay playsinline></video>
-
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<video id="video" controls autoplay></video>
 
 <script>
 const video = document.getElementById("video");
-const stream = "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
+const url = "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
 
-// تشغيل الفيديو
 if (Hls.isSupported()) {
   const hls = new Hls();
-  hls.loadSource(stream);
+  hls.loadSource(url);
   hls.attachMedia(video);
   hls.on(Hls.Events.MANIFEST_PARSED, () => {
     video.play();
   });
 } else {
-  video.src = stream;
+  video.src = url;
   video.play();
 }
-
-// 🔥 دخول شاشة كاملة تلقائي
-function fullScreen() {
-  const el = document.documentElement;
-
-  if (el.requestFullscreen) {
-    el.requestFullscreen();
-  } else if (el.webkitRequestFullscreen) {
-    el.webkitRequestFullscreen();
-  }
-}
-
-// 🔥 محاولة إجبار وضع أفقي
-async function landscape() {
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      await screen.orientation.lock("landscape");
-    }
-  } catch (e) {}
-}
-
-// لازم user gesture → لذلك أول click فقط
-document.addEventListener("click", () => {
-  fullScreen();
-  landscape();
-}, { once: true });
-
 </script>
 
 </body>
