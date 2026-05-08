@@ -1,13 +1,16 @@
 const express = require("express");
 const axios = require("axios");
-const cheerio = require("cheerio");
 const fs = require("fs");
 
 const app = express();
 app.use(express.json());
 
+// ================== TELEGRAM ==================
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
+
+// ================== OFFICIAL API ==================
+const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
 // ================== WILAYAS ==================
 const wilayas = [
@@ -25,7 +28,7 @@ const wilayas = [
 ];
 
 // ================== STORAGE ==================
-let dataFile = "./data.json";
+const dataFile = "./data.json";
 
 function loadData() {
   if (!fs.existsSync(dataFile)) {
@@ -51,7 +54,7 @@ async function send(chatId, text, options = {}) {
   }
 }
 
-// ================== START BUTTONS ==================
+// ================== MENU ==================
 function mainMenu() {
   return {
     reply_markup: {
@@ -63,21 +66,77 @@ function mainMenu() {
   };
 }
 
-// ================== CALLBACK ==================
+// ================== GET API ==================
+async function getWilayaStatus() {
+  try {
+    const res = await axios.get(API_URL, {
+      headers: {
+        accept: "application/json"
+      },
+      timeout: 15000
+    });
+
+    return res.data;
+  } catch (e) {
+    console.log("API error:", e.message);
+    return [];
+  }
+}
+
+// ================== CHECK SYSTEM ==================
+async function check() {
+  const data = loadData();
+
+  try {
+    const apiData = await getWilayaStatus();
+
+    for (let id in data.users) {
+      const userWilaya = data.users[id].wilaya;
+      if (!userWilaya) continue;
+
+      const w = apiData.find(x => x.wilayaNameAr === userWilaya);
+      if (!w) continue;
+
+      const available = w.available;
+
+      if (!data.last[userWilaya]) {
+        data.last[userWilaya] = "closed";
+      }
+
+      if (available && data.last[userWilaya] === "closed") {
+        data.last[userWilaya] = "open";
+
+        await send(
+          id,
+          `🚨 فتح التسجيل في ولايتك: ${userWilaya}`
+        );
+      }
+
+      if (!available) {
+        data.last[userWilaya] = "closed";
+      }
+    }
+
+    saveData(data);
+
+  } catch (e) {
+    console.log("check error:", e.message);
+  }
+}
+
+// ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
   const data = loadData();
 
   try {
     const update = req.body;
 
-    // ===== messages =====
     if (update.message) {
       const msg = update.message;
       const chatId = msg.chat.id;
-      const text = (msg.text || "").toLowerCase();
+      const text = msg.text || "";
       const name = msg.from.first_name || "User";
 
-      // register user
       if (!data.users[chatId]) {
         data.users[chatId] = { wilaya: null };
         saveData(data);
@@ -85,7 +144,7 @@ app.post("/webhook", async (req, res) => {
 
       if (text === "/start") {
         await send(chatId,
-          `👋 مرحبا ${name}\n🤖 اختر ما تريد`,
+          `👋 مرحبا ${name}\nاختر ولايتك`,
           mainMenu()
         );
       }
@@ -95,16 +154,18 @@ app.post("/webhook", async (req, res) => {
       }
 
       else {
-        await send(chatId, "🤖 اختر /start");
+        await send(chatId, "اكتب /start");
       }
     }
 
-    // ===== callback buttons =====
     if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
       const dataCB = update.callback_query.data;
 
-      // choose wilaya menu
+      await axios.post(`${API}/answerCallbackQuery`, {
+        callback_query_id: update.callback_query.id
+      });
+
       if (dataCB === "choose") {
         const buttons = wilayas.map(w => [{
           text: w,
@@ -116,12 +177,10 @@ app.post("/webhook", async (req, res) => {
         });
       }
 
-      // all wilayas
       if (dataCB === "all") {
         await send(chatId, wilayas.join(" • "));
       }
 
-      // select wilaya
       if (dataCB.startsWith("wilaya_")) {
         const w = dataCB.replace("wilaya_", "");
 
@@ -139,37 +198,6 @@ app.post("/webhook", async (req, res) => {
     res.sendStatus(200);
   }
 });
-
-// ================== SCRAPER ==================
-async function check() {
-  const data = loadData();
-
-  try {
-    const res = await axios.get("https://adhahi.dz", { timeout: 15000 });
-    const html = cheerio.load(res.data).text().replace(/\s+/g, " ");
-
-    for (let id in data.users) {
-      const w = data.users[id].wilaya;
-      if (!w) continue;
-
-      const available = !html.includes(`${w} — حجز غير متوفر`);
-
-      if (!data.last[w]) data.last[w] = "closed";
-
-      if (available && data.last[w] === "closed") {
-        data.last[w] = "open";
-        await send(id, `🚨 فتح التسجيل في ولايتك: ${w}`);
-      }
-
-      if (!available) data.last[w] = "closed";
-    }
-
-    saveData(data);
-
-  } catch (e) {
-    console.log("scraper error:", e.message);
-  }
-}
 
 // ================== SERVER ==================
 app.get("/", (req, res) => res.send("Bot running"));
