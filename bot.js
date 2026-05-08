@@ -1,122 +1,139 @@
 const express = require("express");
 const axios = require("axios");
+const cheerio = require("cheerio");
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json());
 
 const TOKEN = process.env.BOT_TOKEN;
 
 // ================== WILAYAS ==================
 const wilayas = [
-"الجزائر", "وهران", "قسنطينة", "تيبازة",
-"البليدة", "سطيف", "عنابة", "تيزي وزو",
-"بجاية", "باتنة", "الجلفة", "بسكرة"
+  "الجزائر", "وهران", "قسنطينة", "تيبازة",
+  "البليدة", "سطيف", "عنابة", "تيزي وزو",
+  "بجاية", "باتنة", "الجلفة", "بسكرة"
 ];
+
+// ================== SUBSCRIBERS ==================
+let subscribers = [];
 
 // ================== ROOT ==================
 app.get("/", (req, res) => {
-res.send("Bot running ✅");
+  res.send("Bot running ✅");
 });
 
 // ================== SEND MESSAGE ==================
 async function send(chatId, text) {
-try {
-await axios.post(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-chat_id: chatId,
-text
-});
-} catch (e) {
-console.log("send error:", e.response?.data || e.message);
-}
+  try {
+    await axios.post(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+      chat_id: chatId,
+      text
+    });
+  } catch (e) {
+    console.log("send error:", e.response?.data || e.message);
+  }
 }
 
-// ================== SCRAPER ==================
+// ================== SCRAPER STATE ==================
 let lastState = {};
 
+// ================== SCRAPER ==================
 async function checkWilayas() {
-try {
-const res = await axios.get("https://adhahi.dz", {
-timeout: 10000
-});
+  try {
+    const res = await axios.get("https://adhahi.dz", { timeout: 15000 });
 
-```
-const html = res.data;
+    const html = res.data;
+    const $ = cheerio.load(html);
 
-for (let w of wilayas) {
+    for (let w of wilayas) {
 
-  // ✔️ FIXED (no template string issues)
-  const isAvailable = !html.includes(w + " — حجز غير متوفر");
+      // تحسين بسيط للفحص
+      const text = $.text();
+      const isAvailable = !text.includes(w + " — حجز غير متوفر");
 
-  if (!lastState[w]) lastState[w] = "closed";
+      if (!lastState[w]) lastState[w] = "closed";
 
-  if (isAvailable && lastState[w] === "closed") {
-    lastState[w] = "open";
+      if (isAvailable && lastState[w] === "closed") {
+        lastState[w] = "open";
 
-    console.log(`🚨 ${w} OPEN`);
+        console.log(`🚨 ${w} OPEN`);
+
+        for (let id of subscribers) {
+          await send(id, `🚨 فتح التسجيل في: ${w}`);
+        }
+      }
+
+      if (!isAvailable) {
+        lastState[w] = "closed";
+      }
+    }
+
+  } catch (e) {
+    console.log("scraper error:", e.message);
   }
-
-  if (!isAvailable) {
-    lastState[w] = "closed";
-  }
-}
-```
-
-} catch (e) {
-console.log("scraper error:", e.message);
-}
 }
 
 // ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
-try {
-const message = req.body.message;
-if (!message) return res.sendStatus(200);
+  try {
+    const message = req.body.message;
+    if (!message) return res.sendStatus(200);
 
-```
-const text = (message.text || "").toLowerCase();
-const chatId = message.chat.id;
-const name = message.from.first_name || "User";
+    const text = (message.text || "").toLowerCase();
+    const chatId = message.chat.id;
+    const name = message.from.first_name || "User";
 
-console.log(`📩 ${name}: ${text}`);
+    console.log(`📩 ${name}: ${text}`);
 
-if (text === "/start") {
-  await send(chatId, `👋 مرحبا ${name}\n🤖 البوت يعمل الآن Webhook`);
-}
+    // ================= START =================
+    if (text === "/start") {
+      if (!subscribers.includes(chatId)) {
+        subscribers.push(chatId);
+      }
 
-else if (text === "/wilayas") {
-  await send(chatId, `📍 الولايات:\n${wilayas.join(" • ")}`);
-}
+      await send(chatId,
+        `👋 مرحبا ${name}\n🤖 تم تفعيل البوت\n🔔 سأخبرك عند فتح التسجيل`
+      );
+    }
 
-else if (["مرحبا", "سلام", "hi", "hello"].some(w => text.includes(w))) {
-  await send(chatId, `👋 أهلا ${name}`);
-}
+    // ================= WILAYAS =================
+    else if (text === "/wilayas") {
+      await send(chatId, `📍 الولايات:\n${wilayas.join(" • ")}`);
+    }
 
-else if (["شكرا", "merci", "thanks"].some(w => text.includes(w))) {
-  await send(chatId, `😊 العفو ${name}`);
-}
+    // ================= GREETING =================
+    else if (["مرحبا", "سلام", "hi", "hello"].some(w => text.includes(w))) {
+      await send(chatId, `👋 أهلا ${name}`);
+    }
 
-else if (text.includes("تسجيل")) {
-  await send(chatId, `🔔 أنا أراقب فتح التسجيل وسأخبرك فورًا`);
-}
+    // ================= THANKS =================
+    else if (["شكرا", "merci", "thanks"].some(w => text.includes(w))) {
+      await send(chatId, `😊 العفو ${name}`);
+    }
 
-else {
-  await send(chatId, `🤖 جرب:\n/start\n/wilayas`);
-}
+    // ================= REGISTER INFO =================
+    else if (text.includes("تسجيل")) {
+      await send(chatId, `🔔 تم تفعيل التنبيهات، سأخبرك عند الفتح`);
+    }
 
-res.sendStatus(200);
-```
+    // ================= DEFAULT =================
+    else {
+      await send(chatId, `🤖 الأوامر:\n/start\n/wilayas`);
+    }
 
-} catch (e) {
-console.log("webhook error:", e.message);
-res.sendStatus(200);
-}
+    res.sendStatus(200);
+
+  } catch (e) {
+    console.log("webhook error:", e.message);
+    res.sendStatus(200);
+  }
 });
 
-// ================== START SERVER ==================
+// ================== SERVER ==================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-console.log("🚀 Bot running on port", PORT);
+  console.log("🚀 Bot running on port", PORT);
 });
 
 // ================== LOOP SCRAPER ==================
