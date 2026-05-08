@@ -9,10 +9,10 @@ app.use(express.json());
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ================== OFFICIAL API ==================
+// ================== API ==================
 const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
-// ================== M3U STREAM ==================
+// ================== IPTV ==================
 const TV_STREAM = "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
 
 // ================== WILAYAS ==================
@@ -70,14 +70,13 @@ function mainMenu() {
   };
 }
 
-// ================== API CHECK ==================
+// ================== API DATA ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
       timeout: 20000,
       headers: { Accept: "application/json" }
     });
-
     return res.data || [];
   } catch (e) {
     console.log("API error:", e.message);
@@ -109,7 +108,6 @@ async function check() {
 
       if (available && data.last[userId][wName] === "closed") {
         data.last[userId][wName] = "open";
-
         await send(userId, `🚨 فتح التسجيل في: ${wName}`);
       }
 
@@ -127,10 +125,7 @@ async function heartbeat() {
   const data = loadData();
 
   for (let userId in data.users) {
-    await send(
-      userId,
-      `✅ البوت يعمل طبيعي\n⏰ ${new Date().toLocaleTimeString()}`
-    );
+    await send(userId, `✅ البوت شغال\n⏰ ${new Date().toLocaleTimeString()}`);
   }
 }
 
@@ -141,7 +136,6 @@ app.post("/webhook", async (req, res) => {
   try {
     const update = req.body;
 
-    // ===== MESSAGE =====
     if (update.message) {
       const chatId = update.message.chat.id;
       const text = update.message.text || "";
@@ -159,27 +153,21 @@ app.post("/webhook", async (req, res) => {
         await send(chatId, wilayas.join(" • "));
       }
 
-      // 📺 TV COMMAND
       else if (text === "/tv") {
-        await send(chatId, "📺 تشغيل البث...");
+        const PLAYER_URL = "https://botadh.onrender.com/player";
 
-        await send(chatId, TV_STREAM, {
+        await send(chatId, "📺 تشغيل القناة", {
           reply_markup: {
             inline_keyboard: [
-              [{ text: "▶ تشغيل", url: TV_STREAM }]
+              [{ text: "▶ تشغيل", url: PLAYER_URL }]
             ]
           }
         });
       }
 
-      else {
-        await send(chatId, "اكتب /start");
-      }
-
       saveData(data);
     }
 
-    // ===== CALLBACK =====
     if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
       const cb = update.callback_query.data;
@@ -188,13 +176,11 @@ app.post("/webhook", async (req, res) => {
         callback_query_id: update.callback_query.id
       });
 
-      // ALL
       if (cb === "all") {
         data.users[chatId] = { wilayas: [...wilayas] };
         await send(chatId, "✅ تم تفعيل كل الولايات");
       }
 
-      // CHOOSE
       if (cb === "choose") {
         const buttons = wilayas.map(w => ([{
           text: w,
@@ -206,19 +192,18 @@ app.post("/webhook", async (req, res) => {
         });
       }
 
-      // TV BUTTON
       if (cb === "tv") {
-        await send(chatId, "📺 تشغيل البث...");
-        await send(chatId, TV_STREAM, {
+        const PLAYER_URL = "https://botadh.onrender.com/player";
+
+        await send(chatId, "📺 تشغيل القناة", {
           reply_markup: {
             inline_keyboard: [
-              [{ text: "▶ تشغيل", url: TV_STREAM }]
+              [{ text: "▶ تشغيل", url: PLAYER_URL }]
             ]
           }
         });
       }
 
-      // SELECT WILAYA
       if (cb.startsWith("wilaya_")) {
         const w = cb.replace("wilaya_", "");
 
@@ -231,16 +216,21 @@ app.post("/webhook", async (req, res) => {
         }
 
         await send(chatId, `✅ تم اختيار: ${w}`);
-        saveData(data);
       }
+
+      saveData(data);
     }
 
     res.sendStatus(200);
-
   } catch (e) {
-    console.log("webhook error:", e.message);
+    console.log("error:", e.message);
     res.sendStatus(200);
   }
+});
+
+// ================== PLAYER ROUTE ==================
+app.get("/player", (req, res) => {
+  res.sendFile(__dirname + "/player.html");
 });
 
 // ================== SERVER ==================
