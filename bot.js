@@ -66,7 +66,7 @@ function mainMenu() {
   };
 }
 
-// ================== GET API ==================
+// ================== API ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
@@ -106,10 +106,7 @@ async function check() {
       if (available && data.last[userId][wName] === "closed") {
         data.last[userId][wName] = "open";
 
-        await send(
-          userId,
-          `🚨 فتح التسجيل في: ${wName}`
-        );
+        await send(userId, `🚨 فتح التسجيل في: ${wName}`);
       }
 
       if (!available) {
@@ -128,12 +125,12 @@ app.post("/webhook", async (req, res) => {
   try {
     const update = req.body;
 
-    // ===== MESSAGE =====
-    if (update.message) {
+    // ================== MESSAGE ==================
+    if (update.message && update.message.text) {
       const msg = update.message;
       const chatId = msg.chat.id;
-      const text = msg.text || "";
-      const name = msg.from.first_name || "User";
+      const text = msg.text.trim();
+      const name = msg.from?.first_name || "User";
 
       if (!data.users[chatId]) {
         data.users[chatId] = { wilayas: [] };
@@ -150,10 +147,14 @@ app.post("/webhook", async (req, res) => {
         await send(chatId, wilayas.join(" • "));
       }
 
+      else {
+        await send(chatId, "👋 استعمل /start لاختيار الولايات");
+      }
+
       saveData(data);
     }
 
-    // ===== CALLBACK =====
+    // ================== CALLBACK ==================
     if (update.callback_query) {
       const chatId = update.callback_query.message.chat.id;
       const cb = update.callback_query.data;
@@ -164,13 +165,17 @@ app.post("/webhook", async (req, res) => {
 
       // ALL WILAYAS
       if (cb === "all") {
-        data.users[chatId] = { wilayas: [...wilayas] };
+        if (!data.users[chatId]) {
+          data.users[chatId] = { wilayas: [] };
+        }
+
+        data.users[chatId].wilayas = wilayas;
 
         await send(chatId, "✅ تم تفعيل كل الولايات");
         saveData(data);
       }
 
-      // CHOOSE ONE
+      // CHOOSE MENU
       if (cb === "choose") {
         const buttons = wilayas.map(w => ([{
           text: w,
@@ -216,4 +221,4 @@ app.listen(PORT, () => console.log("🚀 Running on", PORT));
 // ================== LOOP ==================
 setInterval(() => {
   check().catch(console.error);
-}, 30000); // كل 30 ثانية إشعار أسرع
+}, 15000);
