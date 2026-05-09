@@ -12,10 +12,6 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 // ================== API ==================
 const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
-// ================== CONFIG ==================
-const CHECK_INTERVAL = 30000;
-const HEARTBEAT_INTERVAL = 300000;
-
 // ================== WILAYAS ==================
 const wilayas = [
   "أدرار","الشلف","الأغواط","أم البواقي","باتنة",
@@ -54,11 +50,11 @@ async function send(chatId, text, options = {}) {
       ...options
     });
   } catch (e) {
-    console.log("send error:", e.message);
+    console.log("SEND ERROR:", e.message);
   }
 }
 
-// ================== MENU (نفس السابق) ==================
+// ================== MENU (نفس السابق 100%) ==================
 function menu() {
   return {
     reply_markup: {
@@ -70,46 +66,58 @@ function menu() {
   };
 }
 
-// ================== API ==================
-async function getData() {
+// ================== GET API ==================
+async function getAPI() {
   try {
-    const res = await axios.get(API_URL);
+    const res = await axios.get(API_URL, { timeout: 20000 });
     return Array.isArray(res.data) ? res.data : [];
   } catch {
     return [];
   }
 }
 
-// ================== CHECK OPEN ==================
+// ================== OPEN CHECK (مهم) ==================
 function isOpen(w) {
-  return w?.available === true || Number(w?.remainingQuota) > 0;
+  return (
+    w?.available === true ||
+    Number(w?.remainingQuota) > 0
+  );
 }
 
-// ================== CHECK LOOP ==================
+// ================== CHECK LOOP (FIXED 100%) ==================
 async function check() {
   const db = load();
-  const api = await getData();
+  const api = await getAPI();
 
   for (const userId in db.users) {
     const user = db.users[userId];
-    const selected = user.wilayas || [];
+    const selected = user?.wilayas || [];
 
-    for (const name of selected) {
-      const w = api.find(x => x.wilayaNameAr?.trim() === name?.trim());
+    for (const wName of selected) {
+
+      const w = api.find(x =>
+        (x.wilayaNameAr || "").trim() === wName.trim()
+      );
+
       if (!w) continue;
 
       const open = isOpen(w);
 
       if (!db.last[userId]) db.last[userId] = {};
-      if (db.last[userId][name] === undefined) db.last[userId][name] = false;
+      if (db.last[userId][wName] === undefined) db.last[userId][wName] = false;
 
-      if (open && !db.last[userId][name]) {
-        db.last[userId][name] = true;
-        await send(userId, `🚨 فتح التسجيل:\n${name}`);
+      // ================= OPEN EVENT =================
+      if (open && db.last[userId][wName] === false) {
+        db.last[userId][wName] = true;
+
+        console.log("OPEN:", wName);
+
+        await send(userId, `🚨 فتح التسجيل:\n${wName}`);
       }
 
+      // ================= RESET =================
       if (!open) {
-        db.last[userId][name] = false;
+        db.last[userId][wName] = false;
       }
     }
   }
@@ -117,18 +125,20 @@ async function check() {
   save(db);
 }
 
-// ================== HEARTBEAT ==================
+// ================== HEARTBEAT (5 min per user) ==================
 async function heartbeat() {
   const db = load();
 
   for (const id in db.users) {
-    if (!db.users[id].lastHB) db.users[id].lastHB = 0;
-
     const now = Date.now();
-    if (now - db.users[id].lastHB < HEARTBEAT_INTERVAL) continue;
+    const last = db.users[id].lastHB || 0;
 
-    await send(id, "✅ البوت يعمل بشكل طبيعي");
-    db.users[id].lastHB = now;
+    if (now - last < 300000) continue;
+
+    try {
+      await send(id, "✅ البوت يعمل بشكل طبيعي");
+      db.users[id].lastHB = now;
+    } catch {}
   }
 
   save(db);
@@ -141,6 +151,7 @@ app.post("/webhook", async (req, res) => {
   try {
     const u = req.body;
 
+    // ================= MESSAGE =================
     if (u.message) {
       const chatId = u.message.chat.id;
       const text = u.message.text || "";
@@ -149,12 +160,11 @@ app.post("/webhook", async (req, res) => {
         db.users[chatId] = { wilayas: [], lastHB: 0 };
       }
 
-      // ===== START =====
       if (text === "/start") {
         await send(chatId, "👋 مرحبا", menu());
       }
 
-      // ===== CALLBACK =====
+      // ================= CALLBACK =================
       if (u.callback_query) {
         const cb = u.callback_query.data;
 
@@ -203,11 +213,11 @@ app.post("/webhook", async (req, res) => {
 });
 
 // ================== SERVER ==================
-app.get("/", (req, res) => res.send("Bot OK"));
+app.get("/", (req, res) => res.send("Bot running"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("RUN:", PORT));
 
 // ================== LOOPS ==================
-setInterval(() => check().catch(console.error), CHECK_INTERVAL);
-setInterval(() => heartbeat().catch(console.error), HEARTBEAT_INTERVAL);
+setInterval(() => check().catch(console.error), 30000);
+setInterval(() => heartbeat().catch(console.error), 300000);
