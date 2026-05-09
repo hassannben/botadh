@@ -10,15 +10,22 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // ================= SEND TEXT =================
 async function send(chatId, text, options = {}) {
+
   try {
+
     await axios.post(`${API}/sendMessage`, {
       chat_id: chatId,
       text,
       parse_mode: "HTML",
       ...options
     });
+
   } catch (e) {
-    console.log("SEND ERROR:", e.response?.data || e.message);
+
+    console.log(
+      "SEND ERROR:",
+      e.response?.data || e.message
+    );
   }
 }
 
@@ -28,13 +35,12 @@ async function sendVideo(chatId, video, caption = "") {
   try {
 
     if (!video) {
-      return send(chatId, "❌ رابط الفيديو غير موجود");
+      return send(chatId, "❌ الفيديو غير موجود");
     }
 
-    // 🔥 إصلاح http
     video = video.replace("http://", "https://");
 
-    console.log("VIDEO URL:", video);
+    console.log("VIDEO:", video);
 
     await axios.post(
       `${API}/sendVideo`,
@@ -67,18 +73,26 @@ async function sendVideo(chatId, video, caption = "") {
 
 // ================= CALLBACK =================
 async function answerCallback(id) {
+
   try {
-    await axios.post(`${API}/answerCallbackQuery`, {
-      callback_query_id: id
-    });
+
+    await axios.post(
+      `${API}/answerCallbackQuery`,
+      {
+        callback_query_id: id
+      }
+    );
+
   } catch {}
 }
 
 // ================= MENU =================
 function menu() {
+
   return {
     reply_markup: {
       inline_keyboard: [
+
         [
           {
             text: "🎬 TikTok",
@@ -89,29 +103,32 @@ function menu() {
             callback_data: "ig"
           }
         ],
+
         [
-          {
-            text: "▶ YouTube",
-            callback_data: "yt"
-          },
           {
             text: "📘 Facebook",
             callback_data: "fb"
+          },
+          {
+            text: "▶ YouTube",
+            callback_data: "yt"
           }
         ],
+
         [
           {
-            text: "📌 تعليمات",
+            text: "📌 المساعدة",
             callback_data: "help"
           }
         ]
+
       ]
     }
   };
 }
 
 // ================= DETECT =================
-function detectPlatform(url) {
+function detect(url) {
 
   if (
     /tiktok\.com|vm\.tiktok\.com/i.test(url)
@@ -123,12 +140,16 @@ function detectPlatform(url) {
     return "instagram";
   }
 
-  if (/youtube\.com|youtu\.be/i.test(url)) {
-    return "youtube";
+  if (
+    /facebook\.com|fb\.watch/i.test(url)
+  ) {
+    return "facebook";
   }
 
-  if (/facebook\.com|fb\.watch/i.test(url)) {
-    return "facebook";
+  if (
+    /youtube\.com|youtu\.be/i.test(url)
+  ) {
+    return "youtube";
   }
 
   return null;
@@ -176,35 +197,35 @@ async function getInstagram(url) {
 
   try {
 
-    // 🔥 ضع API حقيقي هنا لاحقاً
+    const res = await axios.get(
+      `https://api.neoxr.eu/api/igdl?url=${encodeURIComponent(url)}&apikey=free`,
+      {
+        timeout: 30000
+      }
+    );
+
+    const d = res.data;
 
     return {
       type: "Instagram",
-      author: "Instagram User",
-      views: 0,
+      author: "Instagram",
+      nickname: "Instagram User",
+      country: "Unknown",
       likes: 0,
-      video: null
+      views: 0,
+      video: d.data?.[0]?.url?.replace(
+        "http://",
+        "https://"
+      )
     };
 
-  } catch {
-    return null;
-  }
-}
+  } catch (e) {
 
-// ================= YOUTUBE =================
-async function getYouTube(url) {
+    console.log(
+      "IG ERROR:",
+      e.response?.data || e.message
+    );
 
-  try {
-
-    return {
-      type: "YouTube",
-      author: "YouTube",
-      views: 0,
-      likes: 0,
-      video: null
-    };
-
-  } catch {
     return null;
   }
 }
@@ -214,15 +235,61 @@ async function getFacebook(url) {
 
   try {
 
+    const res = await axios.get(
+      `https://api.neoxr.eu/api/fb?url=${encodeURIComponent(url)}&apikey=free`,
+      {
+        timeout: 30000
+      }
+    );
+
+    const d = res.data;
+
     return {
       type: "Facebook",
       author: "Facebook",
-      views: 0,
+      nickname: "Facebook User",
+      country: "Unknown",
       likes: 0,
+      views: 0,
+      video:
+        d.data?.hd?.replace("http://", "https://") ||
+        d.data?.sd?.replace("http://", "https://")
+    };
+
+  } catch (e) {
+
+    console.log(
+      "FB ERROR:",
+      e.response?.data || e.message
+    );
+
+    return null;
+  }
+}
+
+// ================= YOUTUBE =================
+async function getYouTube(url) {
+
+  try {
+
+    // ⚠ YouTube يحتاج yt-dlp
+    return {
+      type: "YouTube",
+      author: "YouTube",
+      nickname: "YouTube User",
+      country: "Unknown",
+      likes: 0,
+      views: 0,
       video: null
     };
 
-  } catch {
+  } catch (e) {
+
+    console.log(
+      "YT ERROR:",
+      e.response?.data || e.message
+    );
+
     return null;
   }
 }
@@ -277,21 +344,20 @@ app.post("/webhook", async (req, res) => {
 
         return send(
           chatId,
-`📌 التعليمات:
-
-1️⃣ أرسل رابط فيديو
-2️⃣ انتظر المعالجة
-3️⃣ سيصلك الفيديو مباشرة`
+`📌 أرسل أي رابط فيديو:
+• TikTok
+• Instagram
+• Facebook`
         );
       }
 
       return send(
         chatId,
-        "📌 أرسل رابط فيديو"
+        "📌 أرسل رابط الفيديو"
       );
     }
 
-    // ================= CHECK URL =================
+    // ================= URL =================
     if (
       message &&
       /^https?:\/\//i.test(text)
@@ -302,29 +368,28 @@ app.post("/webhook", async (req, res) => {
         "⏳ جاري المعالجة..."
       );
 
-      const platform =
-        detectPlatform(text);
+      const type = detect(text);
 
       let data = null;
 
       // ================= TIKTOK =================
-      if (platform === "tiktok") {
+      if (type === "tiktok") {
         data = await getTikTok(text);
       }
 
       // ================= INSTAGRAM =================
-      else if (platform === "instagram") {
+      else if (type === "instagram") {
         data = await getInstagram(text);
       }
 
-      // ================= YOUTUBE =================
-      else if (platform === "youtube") {
-        data = await getYouTube(text);
+      // ================= FACEBOOK =================
+      else if (type === "facebook") {
+        data = await getFacebook(text);
       }
 
-      // ================= FACEBOOK =================
-      else if (platform === "facebook") {
-        data = await getFacebook(text);
+      // ================= YOUTUBE =================
+      else if (type === "youtube") {
+        data = await getYouTube(text);
       }
 
       // ================= FAIL =================
@@ -336,7 +401,7 @@ app.post("/webhook", async (req, res) => {
         );
       }
 
-      // ================= NO VIDEO =================
+      // ================= UNSUPPORTED =================
       if (!data.video) {
 
         return send(
@@ -345,15 +410,15 @@ app.post("/webhook", async (req, res) => {
         );
       }
 
-      // ================= SEND VIDEO =================
+      // ================= SEND =================
       return sendVideo(
         chatId,
         data.video,
 `🎬 <b>${data.type}</b>
 
 👤 <b>الحساب:</b> ${data.author}
-📛 <b>الاسم:</b> ${data.nickname || "Unknown"}
-🌍 <b>البلد:</b> ${data.country || "Unknown"}
+📛 <b>الاسم:</b> ${data.nickname}
+🌍 <b>البلد:</b> ${data.country}
 ❤️ <b>الإعجابات:</b> ${data.likes}
 👁 <b>المشاهدات:</b> ${data.views}`
       );
