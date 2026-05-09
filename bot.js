@@ -38,10 +38,9 @@ async function sendVideo(chatId, video, caption = "") {
         caption,
         parse_mode: "HTML"
       },
-      {
-        timeout: 120000
-      }
+      { timeout: 120000 }
     );
+
   } catch (e) {
     console.log("VIDEO ERROR:", e.response?.data || e.message);
     await send(chatId, "❌ فشل إرسال الفيديو");
@@ -70,9 +69,7 @@ function menu() {
           { text: "📘 Facebook", callback_data: "fb" },
           { text: "▶ YouTube", callback_data: "yt" }
         ],
-        [
-          { text: "📌 المساعدة", callback_data: "help" }
-        ]
+        [{ text: "📌 المساعدة", callback_data: "help" }]
       ]
     }
   };
@@ -148,9 +145,7 @@ async function getFacebook(url) {
       country: "Unknown",
       likes: 0,
       views: 0,
-      video:
-        res.data?.data?.hd ||
-        res.data?.data?.sd
+      video: res.data?.data?.hd || res.data?.data?.sd
     };
   } catch (e) {
     console.log("FB ERROR:", e.message);
@@ -158,23 +153,23 @@ async function getFacebook(url) {
   }
 }
 
-// ================= YOUTUBE (REAL yt-dlp) =================
+// ================= YOUTUBE (FIXED yt-dlp) =================
 async function getYouTube(url) {
   try {
     const result = await ytDlp(url, {
+      format: "best[ext=mp4]/best",
       dumpSingleJson: true,
       noWarnings: true,
-      noCheckCertificates: true,
-      preferFreeFormats: true
+      noCheckCertificates: true
     });
 
-    const formats = result.formats || [];
+    if (!result) return null;
 
-    const best = formats
-      .filter(f => f.url && f.ext === "mp4")
-      .sort((a, b) => (b.height || 0) - (a.height || 0))[0];
+    const videoUrl =
+      result.url ||
+      result.formats?.find(f => f.url)?.url;
 
-    if (!best) return null;
+    if (!videoUrl) return null;
 
     return {
       type: "YouTube",
@@ -183,7 +178,7 @@ async function getYouTube(url) {
       country: "Unknown",
       likes: 0,
       views: result.view_count || 0,
-      video: best.url
+      video: videoUrl.replace("http://", "https://")
     };
 
   } catch (e) {
@@ -197,7 +192,6 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 
   const u = req.body;
-
   const message = u.message;
   const callback = u.callback_query;
 
