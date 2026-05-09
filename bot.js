@@ -10,7 +10,7 @@ app.use(express.json());
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ================== OFFICIAL API ==================
+// ================== API ==================
 const API_URL =
   "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
@@ -43,7 +43,11 @@ function loadData() {
   if (!fs.existsSync(dataFile)) {
     fs.writeFileSync(
       dataFile,
-      JSON.stringify({ users: {}, last: {} }, null, 2)
+      JSON.stringify(
+        { users: {}, last: {}, heartbeatLast: {} },
+        null,
+        2
+      )
     );
   }
   return JSON.parse(fs.readFileSync(dataFile));
@@ -79,7 +83,7 @@ function mainMenu() {
   };
 }
 
-// ================== GET API ==================
+// ================== API ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
@@ -93,7 +97,7 @@ async function getWilayaStatus() {
   }
 }
 
-// ================== STRONG DETECTION ==================
+// ================== OPEN CHECK ==================
 function isOpen(w) {
   return (
     w?.available === true ||
@@ -104,6 +108,14 @@ function isOpen(w) {
   );
 }
 
+// ================== NORMALIZE ==================
+function normalize(s) {
+  return String(s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
 // ================== CHECK LOOP ==================
 async function check() {
   const data = loadData();
@@ -112,7 +124,6 @@ async function check() {
   if (!Array.isArray(apiData)) return;
 
   for (let userId in data.users) {
-
     const user = data.users[userId];
     if (!user) continue;
 
@@ -120,40 +131,23 @@ async function check() {
 
     for (let wName of selected) {
 
-      const w = apiData.find(
-        x =>
-          x.wilayaNameAr?.trim() ===
-          wName?.trim()
+      const w = apiData.find(x =>
+        normalize(x.wilayaNameAr) === normalize(wName)
       );
 
       if (!w) continue;
 
       const open = isOpen(w);
 
-      if (!data.last[userId]) {
-        data.last[userId] = {};
-      }
+      if (!data.last[userId]) data.last[userId] = {};
+      if (!data.last[userId][wName]) data.last[userId][wName] = "closed";
 
-      if (!data.last[userId][wName]) {
-        data.last[userId][wName] = "closed";
-      }
-
-      // ================== OPEN ==================
-      if (
-        open &&
-        data.last[userId][wName] === "closed"
-      ) {
+      if (open && data.last[userId][wName] === "closed") {
         data.last[userId][wName] = "open";
 
-        console.log("OPEN:", wName);
-
-        await send(
-          userId,
-          `🚨 فتح التسجيل:\n${wName}`
-        );
+        await send(userId, `🚨 فتح التسجيل:\n${wName}`);
       }
 
-      // ================== RESET ==================
       if (!open) {
         data.last[userId][wName] = "closed";
       }
@@ -163,18 +157,33 @@ async function check() {
   saveData(data);
 }
 
-// ================== HEARTBEAT ==================
+// ================== HEARTBEAT (5 MIN / USER) ==================
 async function heartbeat() {
   const data = loadData();
 
+  const now = Date.now();
+  const FIVE_MIN = 5 * 60 * 1000;
+
   for (let userId in data.users) {
+
+    const last = data.heartbeatLast[userId] || 0;
+
+    if (now - last < FIVE_MIN) continue;
+
     try {
       await send(
         userId,
-        `✅ البوت يعمل\n⏰ ${new Date().toLocaleTimeString()}`
+        `✅ البوت شغال\n📡 المراقبة تعمل\n⏰ ${new Date().toLocaleTimeString()}`
       );
-    } catch (e) {}
+
+      data.heartbeatLast[userId] = now;
+
+    } catch (e) {
+      console.log("heartbeat error:", e.message);
+    }
   }
+
+  saveData(data);
 }
 
 // ================== WEBHOOK ==================
@@ -247,10 +256,6 @@ app.post("/webhook", async (req, res) => {
       if (cb.startsWith("wilaya_")) {
         const w = cb.replace("wilaya_", "");
 
-        if (!data.users[chatId]) {
-          data.users[chatId] = { wilayas: [] };
-        }
-
         if (!data.users[chatId].wilayas.includes(w)) {
           data.users[chatId].wilayas.push(w);
         }
@@ -281,7 +286,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🚀 Running on", PORT));
 
 // ================== LOOPS ==================
-setInterval(() => check().catch(console.error), 30000);
+setInterval(() => check().catch(console.error), 60000);
 setInterval(() => heartbeat().catch(console.error), 300000);
 
 // ================== SAFETY ==================
