@@ -8,9 +8,6 @@ app.use(express.json());
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// API تاع تحميل TikTok (تقدر تبدلو)
-const TIK_API = "https://botadh.onrender.com/download";
-
 // ================== SEND MESSAGE ==================
 async function send(chatId, text, options = {}) {
   try {
@@ -34,14 +31,27 @@ async function answerCallback(id) {
   } catch {}
 }
 
-// ================== GET TIKTOK ==================
+// ================== TIKTOK API (FIXED) ==================
 async function getTikTok(url) {
   try {
-    const res = await axios.get(TIK_API, {
-      params: { url }
-    });
-    return res.data;
-  } catch {
+    const res = await axios.get(
+      `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`
+    );
+
+    const data = res.data?.data;
+
+    if (!data) return null;
+
+    return {
+      author: data.author?.unique_id || "Unknown",
+      nickname: data.author?.nickname || "Unknown",
+      likes: data.digg_count || 0,
+      views: data.play_count || 0,
+      download: data.play || null
+    };
+
+  } catch (e) {
+    console.log("TIK ERROR:", e.message);
     return null;
   }
 }
@@ -51,8 +61,8 @@ function menu() {
   return {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "🎬 تجربة", callback_data: "test" }],
-        [{ text: "📥 تعليمات", callback_data: "help" }]
+        [{ text: "📌 تعليمات", callback_data: "help" }],
+        [{ text: "🎬 تجربة", callback_data: "test" }]
       ]
     }
   };
@@ -60,44 +70,43 @@ function menu() {
 
 // ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
-  try {
-    const update = req.body;
+  res.sendStatus(200); // مهم جدًا
 
-    const message = update.message;
-    const callback = update.callback_query;
+  try {
+    const u = req.body;
+
+    const message = u.message;
+    const callback = u.callback_query;
 
     const chatId =
       message?.chat?.id ||
       callback?.message?.chat?.id;
 
-    if (!chatId) return res.sendStatus(200);
+    if (!chatId) return;
 
     const text = message?.text || "";
 
     // ================== START ==================
     if (message && text === "/start") {
-      return send(
-        chatId,
-`👋 مرحبا بك في البوت PRO
+      return send(chatId,
+`👋 مرحبا بك في TikTok Bot PRO
 
 📌 أرسل أي رابط TikTok وسأقوم بـ:
-• تحميل الفيديو
+• تحميل الفيديو بدون علامة مائية
 • عرض معلومات الحساب`
-        ,
-        menu()
-      );
+      , menu());
     }
 
     // ================== CALLBACK ==================
     if (callback) {
       await answerCallback(callback.id);
 
-      if (callback.data === "test") {
-        return send(chatId, "✅ الأزرار تعمل بشكل صحيح");
-      }
-
       if (callback.data === "help") {
         return send(chatId, "📌 فقط أرسل رابط TikTok");
+      }
+
+      if (callback.data === "test") {
+        return send(chatId, "✅ الأزرار تعمل بشكل صحيح");
       }
     }
 
@@ -107,42 +116,38 @@ app.post("/webhook", async (req, res) => {
 
       const data = await getTikTok(text);
 
-      if (!data) {
-        return send(chatId, "❌ فشل في تحميل الفيديو");
+      if (!data || !data.download) {
+        return send(chatId, "❌ فشل التحميل - جرب رابط آخر");
       }
 
       return send(chatId,
-`🎬 TikTok Info:
+`🎬 TikTok جاهز:
 
-👤 الحساب: ${data.author || "Unknown"}
-📛 الاسم: ${data.nickname || "Unknown"}
-❤️ إعجابات: ${data.likes || 0}
-👁 مشاهدات: ${data.views || 0}
+👤 الحساب: ${data.author}
+📛 الاسم: ${data.nickname}
+❤️ إعجابات: ${data.likes}
+👁 مشاهدات: ${data.views}
 
-🔗 تحميل:
-${data.download || "غير متوفر"}`);
+🔗 تحميل الفيديو:
+${data.download}`
+      );
     }
 
     // ================== DEFAULT ==================
     if (message) {
-      return send(chatId, "🤖 أرسل رابط TikTok فقط أو /start");
+      return send(chatId, "🤖 أرسل رابط TikTok أو /start");
     }
 
-    res.sendStatus(200);
-
   } catch (e) {
-    console.log("WEBHOOK ERROR:", e.message);
-    res.sendStatus(200);
+    console.log("ERROR:", e.message);
   }
 });
 
 // ================== HOME ==================
 app.get("/", (req, res) => {
-  res.send("🚀 BOT RUNNING PRO");
+  res.send("🚀 BOT RUNNING PRO FIXED");
 });
 
-// ================== START SERVER ==================
+// ================== SERVER ==================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("🚀 RUNNING ON", PORT);
-});
+app.listen(PORT, () => console.log("RUNNING ON", PORT));
