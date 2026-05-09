@@ -8,7 +8,7 @@ app.use(express.json());
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ================= SEND =================
+// ================= SEND TEXT =================
 async function send(chatId, text, options = {}) {
   try {
     await axios.post(`${API}/sendMessage`, {
@@ -18,23 +18,60 @@ async function send(chatId, text, options = {}) {
       ...options
     });
   } catch (e) {
-    console.log("SEND ERROR:", e.message);
+    console.log("SEND ERROR:", e.response?.data || e.message);
   }
 }
 
 // ================= SEND VIDEO =================
 async function sendVideo(chatId, video, caption = "") {
+
   try {
-    await axios.post(`${API}/sendVideo`, {
-      chat_id: chatId,
-      video: { url: video },
-      caption,
-      parse_mode: "HTML"
-    });
+
+    if (!video) {
+      return send(chatId, "❌ رابط الفيديو غير موجود");
+    }
+
+    // 🔥 إصلاح http
+    video = video.replace("http://", "https://");
+
+    console.log("VIDEO URL:", video);
+
+    await axios.post(
+      `${API}/sendVideo`,
+      {
+        chat_id: chatId,
+        video: video,
+        caption,
+        parse_mode: "HTML"
+      },
+      {
+        timeout: 120000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+      }
+    );
+
   } catch (e) {
-    console.log("VIDEO ERROR:", e.message);
-    await send(chatId, "❌ فشل إرسال الفيديو");
+
+    console.log(
+      "VIDEO ERROR:",
+      e.response?.data || e.message
+    );
+
+    await send(
+      chatId,
+      "❌ فشل إرسال الفيديو"
+    );
   }
+}
+
+// ================= CALLBACK =================
+async function answerCallback(id) {
+  try {
+    await axios.post(`${API}/answerCallbackQuery`, {
+      callback_query_id: id
+    });
+  } catch {}
 }
 
 // ================= MENU =================
@@ -43,84 +80,42 @@ function menu() {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "🎬 TikTok", callback_data: "tik" },
-          { text: "📸 Instagram", callback_data: "ig" }
+          {
+            text: "🎬 TikTok",
+            callback_data: "tik"
+          },
+          {
+            text: "📸 Instagram",
+            callback_data: "ig"
+          }
         ],
         [
-          { text: "▶ YouTube", callback_data: "yt" },
-          { text: "📘 Facebook", callback_data: "fb" }
+          {
+            text: "▶ YouTube",
+            callback_data: "yt"
+          },
+          {
+            text: "📘 Facebook",
+            callback_data: "fb"
+          }
+        ],
+        [
+          {
+            text: "📌 تعليمات",
+            callback_data: "help"
+          }
         ]
       ]
     }
   };
 }
 
-// ================= TIKTOK =================
-async function getTikTok(url) {
-  try {
-    const res = await axios.get(
-      `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`
-    );
-
-    const d = res.data?.data;
-
-    if (!d) return null;
-
-    return {
-      type: "TikTok",
-      author: d.author?.unique_id || "Unknown",
-      nickname: d.author?.nickname || "Unknown",
-      likes: d.digg_count || 0,
-      views: d.play_count || 0,
-      video: d.play
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ================= INSTAGRAM =================
-async function getInstagram(url) {
-  try {
-    // API placeholder
-    return {
-      type: "Instagram",
-      video: url
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ================= YOUTUBE =================
-async function getYouTube(url) {
-  try {
-    // API placeholder
-    return {
-      type: "YouTube",
-      video: url
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ================= FACEBOOK =================
-async function getFacebook(url) {
-  try {
-    // API placeholder
-    return {
-      type: "Facebook",
-      video: url
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ================= DETECT PLATFORM =================
+// ================= DETECT =================
 function detectPlatform(url) {
-  if (/tiktok\.com|vm\.tiktok\.com/i.test(url)) {
+
+  if (
+    /tiktok\.com|vm\.tiktok\.com/i.test(url)
+  ) {
     return "tiktok";
   }
 
@@ -139,11 +134,106 @@ function detectPlatform(url) {
   return null;
 }
 
+// ================= TIKTOK =================
+async function getTikTok(url) {
+
+  try {
+
+    const res = await axios.get(
+      `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`,
+      {
+        timeout: 30000
+      }
+    );
+
+    const d = res.data?.data;
+
+    if (!d) return null;
+
+    return {
+      type: "TikTok",
+      author: d.author?.unique_id || "Unknown",
+      nickname: d.author?.nickname || "Unknown",
+      country: d.region || "Unknown",
+      likes: d.digg_count || 0,
+      views: d.play_count || 0,
+      video: d.play?.replace("http://", "https://")
+    };
+
+  } catch (e) {
+
+    console.log(
+      "TIKTOK ERROR:",
+      e.response?.data || e.message
+    );
+
+    return null;
+  }
+}
+
+// ================= INSTAGRAM =================
+async function getInstagram(url) {
+
+  try {
+
+    // 🔥 ضع API حقيقي هنا لاحقاً
+
+    return {
+      type: "Instagram",
+      author: "Instagram User",
+      views: 0,
+      likes: 0,
+      video: null
+    };
+
+  } catch {
+    return null;
+  }
+}
+
+// ================= YOUTUBE =================
+async function getYouTube(url) {
+
+  try {
+
+    return {
+      type: "YouTube",
+      author: "YouTube",
+      views: 0,
+      likes: 0,
+      video: null
+    };
+
+  } catch {
+    return null;
+  }
+}
+
+// ================= FACEBOOK =================
+async function getFacebook(url) {
+
+  try {
+
+    return {
+      type: "Facebook",
+      author: "Facebook",
+      views: 0,
+      likes: 0,
+      video: null
+    };
+
+  } catch {
+    return null;
+  }
+}
+
 // ================= WEBHOOK =================
 app.post("/webhook", async (req, res) => {
+
   res.sendStatus(200);
 
   try {
+
     const u = req.body;
 
     const message = u.message;
@@ -158,10 +248,14 @@ app.post("/webhook", async (req, res) => {
     const text = message?.text || "";
 
     // ================= START =================
-    if (message && text === "/start") {
+    if (
+      message &&
+      text === "/start"
+    ) {
+
       return send(
         chatId,
-`🎬 <b>Media Downloader PRO</b>
+`🎬 <b>MEDIA DOWNLOADER PRO MAX</b>
 
 📥 يدعم:
 • TikTok
@@ -169,76 +263,128 @@ app.post("/webhook", async (req, res) => {
 • Facebook
 • YouTube
 
-📌 أرسل أي رابط للتحميل مباشرة`,
+📌 أرسل رابط فيديو للتحميل مباشرة`,
         menu()
       );
     }
 
     // ================= CALLBACK =================
     if (callback) {
-      await axios.post(`${API}/answerCallbackQuery`, {
-        callback_query_id: callback.id
-      });
 
-      return send(chatId, "📌 أرسل رابط الفيديو");
+      await answerCallback(callback.id);
+
+      if (callback.data === "help") {
+
+        return send(
+          chatId,
+`📌 التعليمات:
+
+1️⃣ أرسل رابط فيديو
+2️⃣ انتظر المعالجة
+3️⃣ سيصلك الفيديو مباشرة`
+        );
+      }
+
+      return send(
+        chatId,
+        "📌 أرسل رابط فيديو"
+      );
     }
 
-    // ================= URL =================
-    if (message && /^https?:\/\//i.test(text)) {
+    // ================= CHECK URL =================
+    if (
+      message &&
+      /^https?:\/\//i.test(text)
+    ) {
 
-      await send(chatId, "⏳ جاري المعالجة...");
+      await send(
+        chatId,
+        "⏳ جاري المعالجة..."
+      );
 
-      const platform = detectPlatform(text);
+      const platform =
+        detectPlatform(text);
 
       let data = null;
 
+      // ================= TIKTOK =================
       if (platform === "tiktok") {
         data = await getTikTok(text);
       }
 
+      // ================= INSTAGRAM =================
       else if (platform === "instagram") {
         data = await getInstagram(text);
       }
 
+      // ================= YOUTUBE =================
       else if (platform === "youtube") {
         data = await getYouTube(text);
       }
 
+      // ================= FACEBOOK =================
       else if (platform === "facebook") {
         data = await getFacebook(text);
       }
 
-      if (!data || !data.video) {
-        return send(chatId, "❌ فشل التحميل");
+      // ================= FAIL =================
+      if (!data) {
+
+        return send(
+          chatId,
+          "❌ فشل التحميل"
+        );
       }
 
+      // ================= NO VIDEO =================
+      if (!data.video) {
+
+        return send(
+          chatId,
+          `⚠ ${data.type} غير مدعوم حالياً`
+        );
+      }
+
+      // ================= SEND VIDEO =================
       return sendVideo(
         chatId,
         data.video,
 `🎬 <b>${data.type}</b>
 
-👤 ${data.author || "Unknown"}
-👁 ${data.views || 0}
-❤️ ${data.likes || 0}`
+👤 <b>الحساب:</b> ${data.author}
+📛 <b>الاسم:</b> ${data.nickname || "Unknown"}
+🌍 <b>البلد:</b> ${data.country || "Unknown"}
+❤️ <b>الإعجابات:</b> ${data.likes}
+👁 <b>المشاهدات:</b> ${data.views}`
       );
     }
 
-    return send(chatId, "🤖 أرسل رابط فيديو صحيح");
-  }
+    // ================= DEFAULT =================
+    if (message) {
 
-  catch (e) {
-    console.log("ERROR:", e.message);
+      return send(
+        chatId,
+        "🤖 أرسل رابط فيديو صحيح أو اكتب /start"
+      );
+    }
+
+  } catch (e) {
+
+    console.log(
+      "GLOBAL ERROR:",
+      e.response?.data || e.message
+    );
   }
 });
 
 // ================= HOME =================
 app.get("/", (req, res) => {
-  res.send("🚀 MEDIA DOWNLOADER RUNNING");
+  res.send("🚀 MEDIA DOWNLOADER PRO MAX");
 });
 
 // ================= SERVER =================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () =>
-  console.log("🚀 SERVER RUNNING ON", PORT)
+  console.log("🚀 RUNNING ON", PORT)
 );
