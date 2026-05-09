@@ -157,19 +157,28 @@ async function getFacebook(url) {
 async function getYouTube(url) {
   try {
     const result = await ytDlp(url, {
-      format: "best[ext=mp4]/best",
       dumpSingleJson: true,
       noWarnings: true,
-      noCheckCertificates: true
+      noCheckCertificates: true,
+      noPlaylist: true,
+      format: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best",
     });
 
-    if (!result) return null;
+    if (!result || !result.formats) {
+      console.log("NO RESULT");
+      return null;
+    }
 
-    const videoUrl =
-      result.url ||
-      result.formats?.find(f => f.url)?.url;
+    // اختيار أفضل فيديو MP4
+    const best =
+      result.formats
+        .filter(f => f.url && f.ext === "mp4")
+        .sort((a, b) => (b.height || 0) - (a.height || 0))[0];
 
-    if (!videoUrl) return null;
+    if (!best || !best.url) {
+      console.log("NO FORMAT FOUND");
+      return null;
+    }
 
     return {
       type: "YouTube",
@@ -178,11 +187,11 @@ async function getYouTube(url) {
       country: "Unknown",
       likes: 0,
       views: result.view_count || 0,
-      video: videoUrl.replace("http://", "https://")
+      video: best.url
     };
 
   } catch (e) {
-    console.log("YT ERROR:", e.message);
+    console.log("YT ERROR FULL:", e?.message);
     return null;
   }
 }
