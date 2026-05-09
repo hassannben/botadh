@@ -1,6 +1,7 @@
 const express = require("express");
 const axios = require("axios");
 const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(express.json());
@@ -34,85 +35,178 @@ const wilayas = [
 const dataFile = "./data.json";
 
 function loadData() {
+
   if (!fs.existsSync(dataFile)) {
-    fs.writeFileSync(dataFile, JSON.stringify({ users: {}, last: {} }));
+
+    fs.writeFileSync(
+      dataFile,
+      JSON.stringify({
+        users: {},
+        last: {}
+      })
+    );
   }
+
   return JSON.parse(fs.readFileSync(dataFile));
 }
 
 function saveData(data) {
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+  fs.writeFileSync(
+    dataFile,
+    JSON.stringify(data, null, 2)
+  );
 }
 
 // ================== SEND ==================
 async function send(chatId, text, options = {}) {
+
   try {
-    await axios.post(`${API}/sendMessage`, {
-      chat_id: chatId,
-      text,
-      ...options
-    });
+
+    await axios.post(
+      `${API}/sendMessage`,
+      {
+        chat_id: chatId,
+        text,
+        ...options
+      }
+    );
+
   } catch (e) {
-    console.log("send error:", e.message);
+
+    console.log(
+      "send error:",
+      e.message
+    );
   }
 }
 
 // ================== MENU ==================
 function mainMenu() {
+
   return {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "📍 اختيار ولاية", callback_data: "choose" }],
-        [{ text: "🌍 كل الولايات", callback_data: "all" }],
-        [{ text: "📺 تشغيل البث", callback_data: "tv" }]
+
+        [
+          {
+            text: "📍 اختيار ولاية",
+            callback_data: "choose"
+          }
+        ],
+
+        [
+          {
+            text: "🌍 كل الولايات",
+            callback_data: "all"
+          }
+        ],
+
+        [
+          {
+            text: "📺 تشغيل البث",
+            callback_data: "tv"
+          }
+        ]
       ]
     }
   };
 }
 
-// ================== API DATA ==================
+// ================== API ==================
 async function getWilayaStatus() {
+
   try {
-    const res = await axios.get(API_URL, {
-      timeout: 20000,
-      headers: { Accept: "application/json" }
-    });
+
+    const res = await axios.get(
+      API_URL,
+      {
+        timeout: 20000,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0"
+        }
+      }
+    );
+
     return res.data || [];
+
   } catch (e) {
-    console.log("API error:", e.message);
+
+    console.log(
+      "API error:",
+      e.message
+    );
+
     return [];
   }
 }
 
-// ================== CHECK LOOP ==================
+// ================== CHECK ==================
 async function check() {
+
   const data = loadData();
-  const apiData = await getWilayaStatus();
+
+  const apiData =
+    await getWilayaStatus();
 
   if (!Array.isArray(apiData)) return;
 
   for (let userId in data.users) {
+
     const user = data.users[userId];
+
     if (!user) continue;
 
-    const selected = user.wilayas || [];
+    const selected =
+      user.wilayas || [];
 
     for (let wName of selected) {
-      const w = apiData.find(x => x.wilayaNameAr === wName);
+
+      const w = apiData.find(
+        x => x.wilayaNameAr === wName
+      );
+
       if (!w) continue;
 
       const available = w.available;
 
-      if (!data.last[userId]) data.last[userId] = {};
-      if (!data.last[userId][wName]) data.last[userId][wName] = "closed";
+      console.log(
+        wName,
+        available
+      );
 
-      if (available && data.last[userId][wName] === "closed") {
-        data.last[userId][wName] = "open";
-        await send(userId, `🚨 فتح التسجيل في: ${wName}`);
+      if (!data.last[userId]) {
+        data.last[userId] = {};
       }
 
+      if (
+        !data.last[userId][wName]
+      ) {
+        data.last[userId][wName] =
+          "closed";
+      }
+
+      // ===== OPEN =====
+      if (
+        available &&
+        data.last[userId][wName]
+          === "closed"
+      ) {
+
+        data.last[userId][wName] =
+          "open";
+
+        await send(
+          userId,
+          `🚨 فتح التسجيل في:\n${wName}`
+        );
+      }
+
+      // ===== CLOSED =====
       if (!available) {
-        data.last[userId][wName] = "closed";
+
+        data.last[userId][wName] =
+          "closed";
       }
     }
   }
@@ -122,123 +216,384 @@ async function check() {
 
 // ================== HEARTBEAT ==================
 async function heartbeat() {
+
   const data = loadData();
 
   for (let userId in data.users) {
-    await send(userId, `✅ البوت شغال\n⏰ ${new Date().toLocaleTimeString()}`);
+
+    const count =
+      (
+        data.users[userId]
+          .wilayas || []
+      ).length;
+
+    await send(
+      userId,
+      `✅ البوت يعمل بشكل طبيعي
+
+📡 المراقبة شغالة
+
+📍 عدد الولايات:
+${count}
+
+⏰ ${new Date()
+.toLocaleTimeString("ar-DZ")}`
+    );
   }
 }
 
 // ================== WEBHOOK ==================
-app.post("/webhook", async (req, res) => {
-  const data = loadData();
+app.post(
+  "/webhook",
+  async (req, res) => {
 
-  try {
-    const update = req.body;
+    const data = loadData();
 
-    if (update.message) {
-      const chatId = update.message.chat.id;
-      const text = update.message.text || "";
-      const name = update.message.from.first_name || "User";
+    try {
 
-      if (!data.users[chatId]) {
-        data.users[chatId] = { wilayas: [] };
-      }
+      const update = req.body;
 
-      if (text === "/start") {
-        await send(chatId, `👋 مرحبا ${name}`, mainMenu());
-      }
+      // ================== MESSAGE ==================
+      if (update.message) {
 
-      else if (text === "/wilayas") {
-        await send(chatId, wilayas.join(" • "));
-      }
+        const chatId =
+          update.message.chat.id;
 
-      else if (text === "/tv") {
-        const PLAYER_URL = "https://botadh.onrender.com/player";
+        const text =
+          update.message.text || "";
 
-        await send(chatId, "📺 تشغيل القناة", {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "▶ تشغيل", url: PLAYER_URL }]
-            ]
-          }
-        });
-      }
-
-      saveData(data);
-    }
-
-    if (update.callback_query) {
-      const chatId = update.callback_query.message.chat.id;
-      const cb = update.callback_query.data;
-
-      await axios.post(`${API}/answerCallbackQuery`, {
-        callback_query_id: update.callback_query.id
-      });
-
-      if (cb === "all") {
-        data.users[chatId] = { wilayas: [...wilayas] };
-        await send(chatId, "✅ تم تفعيل كل الولايات");
-      }
-
-      if (cb === "choose") {
-        const buttons = wilayas.map(w => ([{
-          text: w,
-          callback_data: `wilaya_${w}`
-        }]));
-
-        await send(chatId, "📍 اختر:", {
-          reply_markup: { inline_keyboard: buttons }
-        });
-      }
-
-      if (cb === "tv") {
-        const PLAYER_URL = "https://botadh.onrender.com/player";
-
-        await send(chatId, "📺 تشغيل القناة", {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "▶ تشغيل", url: PLAYER_URL }]
-            ]
-          }
-        });
-      }
-
-      if (cb.startsWith("wilaya_")) {
-        const w = cb.replace("wilaya_", "");
+        const name =
+          update.message.from
+          .first_name || "User";
 
         if (!data.users[chatId]) {
-          data.users[chatId] = { wilayas: [] };
+
+          data.users[chatId] = {
+            wilayas: []
+          };
         }
 
-        if (!data.users[chatId].wilayas.includes(w)) {
-          data.users[chatId].wilayas.push(w);
+        // ===== START =====
+        if (text === "/start") {
+
+          await send(
+            chatId,
+            `👋 مرحبا ${name}
+
+🤖 بوت مراقبة الأضاحي + IPTV
+
+اختر ما تريد:`,
+            mainMenu()
+          );
         }
 
-        await send(chatId, `✅ تم اختيار: ${w}`);
+        // ===== WILAYAS =====
+        else if (
+          text === "/wilayas"
+        ) {
+
+          await send(
+            chatId,
+            wilayas.join(" • ")
+          );
+        }
+
+        // ===== STATUS =====
+        else if (
+          text === "/status"
+        ) {
+
+          const selected =
+            data.users[chatId]
+              .wilayas || [];
+
+          if (
+            selected.length === 0
+          ) {
+
+            await send(
+              chatId,
+              "❌ لم تختر أي ولاية"
+            );
+
+          } else {
+
+            await send(
+              chatId,
+              `📍 الولايات المفعلة:
+
+${selected.join("\n")}`
+            );
+          }
+        }
+
+        // ===== TV =====
+        else if (
+          text === "/tv"
+        ) {
+
+          const PLAYER_URL =
+            "https://botadh.onrender.com/player";
+
+          await send(
+            chatId,
+            "📺 تشغيل القناة",
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: "▶ تشغيل",
+                      url: PLAYER_URL
+                    }
+                  ]
+                ]
+              }
+            }
+          );
+        }
+
+        // ===== HELP =====
+        else if (
+          text === "/help"
+        ) {
+
+          await send(
+            chatId,
+`📌 الأوامر:
+
+/start
+تشغيل البوت
+
+/wilayas
+عرض الولايات
+
+/status
+الولايات المفعلة
+
+/tv
+تشغيل IPTV`
+          );
+        }
+
+        // ===== ANY =====
+        else {
+
+          await send(
+            chatId,
+            `👋 أهلا ${name}
+
+✅ البوت يعمل
+
+اكتب /start`
+          );
+        }
+
+        saveData(data);
       }
 
-      saveData(data);
+      // ================== CALLBACK ==================
+      if (
+        update.callback_query
+      ) {
+
+        const chatId =
+          update.callback_query
+          .message.chat.id;
+
+        const cb =
+          update.callback_query.data;
+
+        await axios.post(
+          `${API}/answerCallbackQuery`,
+          {
+            callback_query_id:
+              update.callback_query.id
+          }
+        );
+
+        // ===== ALL =====
+        if (cb === "all") {
+
+          data.users[chatId] = {
+            wilayas: [...wilayas]
+          };
+
+          saveData(data);
+
+          await send(
+            chatId,
+            `✅ تم تفعيل جميع الولايات
+
+🚨 ستصلك إشعارات عند فتح أي ولاية`
+          );
+        }
+
+        // ===== CHOOSE =====
+        if (cb === "choose") {
+
+          const buttons =
+            wilayas.map(w => ([
+
+              {
+                text: w,
+                callback_data:
+                  `wilaya_${w}`
+              }
+
+            ]));
+
+          await send(
+            chatId,
+            "📍 اختر ولايتك:",
+            {
+              reply_markup: {
+                inline_keyboard:
+                  buttons
+              }
+            }
+          );
+        }
+
+        // ===== TV =====
+        if (cb === "tv") {
+
+          const PLAYER_URL =
+            "https://botadh.onrender.com/player";
+
+          await send(
+            chatId,
+            "📺 تشغيل القناة",
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: "▶ تشغيل",
+                      url: PLAYER_URL
+                    }
+                  ]
+                ]
+              }
+            }
+          );
+        }
+
+        // ===== SELECT =====
+        if (
+          cb.startsWith(
+            "wilaya_"
+          )
+        ) {
+
+          const w =
+            cb.replace(
+              "wilaya_",
+              ""
+            );
+
+          if (
+            !data.users[chatId]
+          ) {
+
+            data.users[chatId] = {
+              wilayas: []
+            };
+          }
+
+          if (
+            !data.users[chatId]
+              .wilayas.includes(w)
+          ) {
+
+            data.users[chatId]
+              .wilayas.push(w);
+          }
+
+          saveData(data);
+
+          await send(
+            chatId,
+            `✅ تم اختيار:
+
+${w}`
+          );
+        }
+      }
+
+      res.sendStatus(200);
+
+    } catch (e) {
+
+      console.log(
+        "webhook error:",
+        e.message
+      );
+
+      res.sendStatus(200);
     }
-
-    res.sendStatus(200);
-  } catch (e) {
-    console.log("error:", e.message);
-    res.sendStatus(200);
   }
-});
+);
 
-// ================== PLAYER ROUTE ==================
-app.get("/player", (req, res) => {
-  res.sendFile(__dirname + "/player.html");
+// ================== PLAYER ==================
+app.get(
+  "/player",
+  (req, res) => {
+
+    res.sendFile(
+      path.join(
+        __dirname,
+        "player.html"
+      )
+    );
+  }
+);
+
+// ================== HOME ==================
+app.get("/", (req, res) => {
+  res.send("Bot running");
 });
 
 // ================== SERVER ==================
-app.get("/", (req, res) => res.send("Bot running"));
+const PORT =
+  process.env.PORT || 3000;
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🚀 Running on", PORT));
+app.listen(PORT, () => {
+
+  console.log(
+    "🚀 Running on",
+    PORT
+  );
+});
 
 // ================== LOOP ==================
-setInterval(() => check().catch(console.error), 30000);
-setInterval(() => heartbeat().catch(console.error), 300000);
+
+// ===== CHECK =====
+setInterval(() => {
+
+  check().catch(
+    console.error
+  );
+
+}, 30000);
+
+// ===== HEARTBEAT =====
+let lastHeartbeat = 0;
+
+setInterval(async () => {
+
+  const now = Date.now();
+
+  if (
+    now - lastHeartbeat >=
+    300000
+  ) {
+
+    lastHeartbeat = now;
+
+    await heartbeat().catch(
+      console.error
+    );
+  }
+
+}, 60000);
