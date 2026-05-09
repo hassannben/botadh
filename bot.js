@@ -34,9 +34,7 @@ async function sendVideo(chatId, video, caption = "") {
       video,
       caption,
       parse_mode: "HTML"
-    }, {
-      timeout: 120000
-    });
+    }, { timeout: 120000 });
 
   } catch (e) {
     console.log("VIDEO ERROR:", e.response?.data || e.message);
@@ -44,19 +42,20 @@ async function sendVideo(chatId, video, caption = "") {
   }
 }
 
-// ================= MENU (UI حديث) =================
+// ================= MODERN UI MENU =================
 function menu() {
   return {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "🎬 تحميل تيك توك", callback_data: "tiktok" }
+          { text: "🎬 تحميل فيديو تيك توك", callback_data: "tiktok" }
         ],
         [
-          { text: "📌 كيفية الاستخدام", callback_data: "help" }
+          { text: "⚡ كيفية الاستخدام", callback_data: "help" },
+          { text: "ℹ️ حول البوت", callback_data: "about" }
         ],
         [
-          { text: "🚀 دعم المطور", url: "https://t.me/" }
+          { text: "🚀 المطور", url: "https://t.me/" }
         ]
       ]
     }
@@ -82,6 +81,7 @@ async function getTikTok(url) {
     return {
       author: d.author?.unique_id || "Unknown",
       nickname: d.author?.nickname || "Unknown",
+      country: d.region || "Unknown",
       views: d.play_count || 0,
       likes: d.digg_count || 0,
       video: d.play?.replace("http://", "https://")
@@ -123,11 +123,11 @@ app.post("/webhook", async (req, res) => {
   if (message && text === "/start") {
     return send(
       chatId,
-`🎬 <b>بوت تحميل تيك توك</b>
+`🔥 <b>WELCOME TO TIKTOK DOWNLOADER PRO</b>
 
-✨ تحميل بدون علامة مائية
-⚡ سريع وخفيف
-📥 فقط أرسل رابط الفيديو
+✨ تحميل فيديوهات تيك توك بدون علامة مائية
+⚡ سرعة عالية + واجهة احترافية
+🌍 يدعم عرض معلومات الفيديو
 
 👇 اختر من القائمة`,
       menu()
@@ -141,12 +141,26 @@ app.post("/webhook", async (req, res) => {
     if (callback.data === "help") {
       return send(
         chatId,
-`📌 طريقة الاستخدام:
+`📌 <b>طريقة الاستخدام</b>
 
 1️⃣ انسخ رابط فيديو TikTok
 2️⃣ أرسله للبوت
-3️⃣ انتظر التحميل
-4️⃣ سيتم إرسال الفيديو مباشرة`
+3️⃣ انتظر التحليل
+4️⃣ سيتم إرسال الفيديو مباشرة
+
+⚡ سهل وسريع`
+      );
+    }
+
+    if (callback.data === "about") {
+      return send(
+        chatId,
+`🤖 <b>حول البوت</b>
+
+🎬 TikTok Downloader PRO
+⚡ أداء سريع
+🔒 آمن
+🌍 يعرض معلومات الفيديو`
       );
     }
 
@@ -155,13 +169,14 @@ app.post("/webhook", async (req, res) => {
     }
   }
 
-  // ================= URL =================
+  // ================= URL HANDLING =================
   if (message && /^https?:\/\//i.test(text)) {
+
     if (!detect(text)) {
-      return send(chatId, "⚠ فقط روابط TikTok مدعومة");
+      return send(chatId, "⚠️ فقط روابط TikTok مدعومة حالياً");
     }
 
-    await send(chatId, "⏳ جاري تحميل الفيديو...");
+    await send(chatId, "⏳ جاري تحليل الفيديو...");
 
     const data = await getTikTok(text);
 
@@ -176,6 +191,7 @@ app.post("/webhook", async (req, res) => {
 
 👤 ${data.nickname}
 🔗 @${data.author}
+🌍 ${data.country}
 ❤️ ${data.likes}
 👁 ${data.views}`
     );
@@ -189,7 +205,7 @@ app.post("/webhook", async (req, res) => {
 
 // ================= HOME =================
 app.get("/", (req, res) => {
-  res.send("🚀 TikTok Bot is Running");
+  res.send("🚀 TikTok Bot PRO is Running");
 });
 
 // ================= SERVER =================
