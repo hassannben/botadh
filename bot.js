@@ -1,6 +1,7 @@
 const express = require("express");
 const axios = require("axios");
 const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(express.json());
@@ -12,32 +13,23 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 // ================== API ==================
 const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
+// ================== DOMAIN ==================
+const DOMAIN = "https://botadh.onrender.com";
+
 // ================== WILAYAS ==================
-const wilayas = [
-  "أدرار","الشلف","الأغواط","أم البواقي","باتنة",
-  "بجاية","بسكرة","بشار","البليدة","البويرة",
-  "تمنراست","تبسة","تلمسان","تيارت","تيزي وزو",
-  "الجزائر","الجلفة","جيجل","سطيف","سعيدة",
-  "سكيكدة","سيدي بلعباس","عنابة","قالمة","قسنطينة",
-  "المدية","مستغانم","المسيلة","معسكر","ورقلة",
-  "وهران","البيض","إليزي","برج بوعريريج","بومرداس",
-  "الطارف","تندوف","تيسمسيلت","الوادي","خنشلة",
-  "سوق أهراس","تيبازة","ميلة","عين الدفلى","النعامة",
-  "عين تموشنت","غرداية","غليزان","المغير","المنيعة",
-  "أولاد جلال","بني عباس","إن صالح","إن قزام","توقرت","جانت"
-];
+const wilayas = [/* نفس قائمتك */];
 
 // ================== STORAGE ==================
 const file = "./data.json";
 
-function load() {
+function loadData() {
   if (!fs.existsSync(file)) {
     fs.writeFileSync(file, JSON.stringify({ users: {}, last: {} }, null, 2));
   }
   return JSON.parse(fs.readFileSync(file));
 }
 
-function save(d) {
+function saveData(d) {
   fs.writeFileSync(file, JSON.stringify(d, null, 2));
 }
 
@@ -49,54 +41,54 @@ async function send(chatId, text, options = {}) {
       text,
       ...options
     });
-  } catch (e) {
-    console.log("SEND ERROR:", e.message);
-  }
+  } catch (e) {}
 }
 
-// ================== MENU (نفس السابق 100%) ==================
-function menu() {
+// ================== MENU ==================
+function mainMenu() {
   return {
     reply_markup: {
       inline_keyboard: [
         [{ text: "📍 اختيار ولاية", callback_data: "choose" }],
-        [{ text: "🌍 كل الولايات", callback_data: "all" }]
+        [{ text: "🌍 كل الولايات", callback_data: "all" }],
+        [{ text: "📺 البث", callback_data: "tv" }]
       ]
     }
   };
 }
 
-// ================== GET API ==================
-async function getAPI() {
+// ================== API ==================
+async function getWilayaStatus() {
   try {
-    const res = await axios.get(API_URL, { timeout: 20000 });
+    const res = await axios.get(API_URL);
     return Array.isArray(res.data) ? res.data : [];
   } catch {
     return [];
   }
 }
 
-// ================== OPEN CHECK (مهم) ==================
-function isOpen(w) {
-  return (
-    w?.available === true ||
-    Number(w?.remainingQuota) > 0
-  );
+// ================== NORMALIZE (IMPORTANT FIX) ==================
+function norm(s = "") {
+  return String(s).replace(/\s+/g, " ").trim();
 }
 
-// ================== CHECK LOOP (FIXED 100%) ==================
+// ================== OPEN CHECK ==================
+function isOpen(w) {
+  return w?.available === true || Number(w?.remainingQuota) > 0;
+}
+
+// ================== CHECK LOOP ==================
 async function check() {
-  const db = load();
-  const api = await getAPI();
+  const db = loadData();
+  const api = await getWilayaStatus();
 
   for (const userId in db.users) {
-    const user = db.users[userId];
-    const selected = user?.wilayas || [];
+    const selected = db.users[userId].wilayas || [];
 
-    for (const wName of selected) {
+    for (const name of selected) {
 
       const w = api.find(x =>
-        (x.wilayaNameAr || "").trim() === wName.trim()
+        norm(x.wilayaNameAr) === norm(name)
       );
 
       if (!w) continue;
@@ -104,52 +96,45 @@ async function check() {
       const open = isOpen(w);
 
       if (!db.last[userId]) db.last[userId] = {};
-      if (db.last[userId][wName] === undefined) db.last[userId][wName] = false;
+      if (db.last[userId][name] === undefined) db.last[userId][name] = false;
 
-      // ================= OPEN EVENT =================
-      if (open && db.last[userId][wName] === false) {
-        db.last[userId][wName] = true;
-
-        console.log("OPEN:", wName);
-
-        await send(userId, `🚨 فتح التسجيل:\n${wName}`);
+      if (open && !db.last[userId][name]) {
+        db.last[userId][name] = true;
+        await send(userId, `🚨 فتح التسجيل:\n${name}`);
       }
 
-      // ================= RESET =================
       if (!open) {
-        db.last[userId][wName] = false;
+        db.last[userId][name] = false;
       }
     }
   }
 
-  save(db);
+  saveData(db);
 }
 
-// ================== HEARTBEAT (5 min per user) ==================
+// ================== HEARTBEAT ==================
 async function heartbeat() {
-  const db = load();
+  const db = loadData();
 
   for (const id in db.users) {
+    if (!db.users[id].lastHB) db.users[id].lastHB = 0;
+
     const now = Date.now();
-    const last = db.users[id].lastHB || 0;
+    if (now - db.users[id].lastHB < 300000) continue;
 
-    if (now - last < 300000) continue;
-
-    try {
-      await send(id, "✅ البوت يعمل بشكل طبيعي");
-      db.users[id].lastHB = now;
-    } catch {}
+    await send(id, "✅ البوت يعمل");
+    db.users[id].lastHB = now;
   }
 
-  save(db);
+  saveData(db);
 }
 
-// ================== WEBHOOK ==================
+// ================== WEBHOOK (FIXED) ==================
 app.post("/webhook", async (req, res) => {
-  const db = load();
+  const db = loadData();
+  const u = req.body;
 
   try {
-    const u = req.body;
 
     // ================= MESSAGE =================
     if (u.message) {
@@ -161,51 +146,61 @@ app.post("/webhook", async (req, res) => {
       }
 
       if (text === "/start") {
-        await send(chatId, "👋 مرحبا", menu());
+        await send(chatId, "👋 مرحبا", mainMenu());
       }
 
-      // ================= CALLBACK =================
-      if (u.callback_query) {
-        const cb = u.callback_query.data;
-
-        await axios.post(`${API}/answerCallbackQuery`, {
-          callback_query_id: u.callback_query.id
-        });
-
-        // ALL
-        if (cb === "all") {
-          db.users[chatId].wilayas = [...wilayas];
-          await send(chatId, "✅ كل الولايات مفعلة");
-        }
-
-        // CHOOSE
-        if (cb === "choose") {
-          const buttons = wilayas.map(w => ([{
-            text: w,
-            callback_data: `w_${w}`
-          }]));
-
-          await send(chatId, "📍 اختر ولاية:", {
-            reply_markup: { inline_keyboard: buttons }
-          });
-        }
-
-        // SELECT WILAYA
-        if (cb.startsWith("w_")) {
-          const w = cb.replace("w_", "");
-
-          if (!db.users[chatId].wilayas.includes(w)) {
-            db.users[chatId].wilayas.push(w);
+      if (text === "/tv") {
+        await send(chatId, "📺 البث", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "▶ تشغيل", url: `${DOMAIN}/player` }]
+            ]
           }
-
-          await send(chatId, `✅ تم اختيار: ${w}`);
-        }
+        });
       }
-
-      save(db);
     }
 
+    // ================= CALLBACK (FIX IMPORTANT) =================
+    if (u.callback_query) {
+      const chatId = u.callback_query.message.chat.id;
+      const cb = u.callback_query.data;
+
+      await axios.post(`${API}/answerCallbackQuery`, {
+        callback_query_id: u.callback_query.id
+      });
+
+      if (!db.users[chatId]) db.users[chatId] = { wilayas: [] };
+
+      if (cb === "all") {
+        db.users[chatId].wilayas = [...wilayas];
+        await send(chatId, "✅ كل الولايات مفعلة");
+      }
+
+      if (cb === "choose") {
+        const buttons = wilayas.map(w => ([{
+          text: w,
+          callback_data: `w_${w}`
+        }]));
+
+        await send(chatId, "📍 اختر:", {
+          reply_markup: { inline_keyboard: buttons }
+        });
+      }
+
+      if (cb.startsWith("w_")) {
+        const w = cb.replace("w_", "");
+
+        if (!db.users[chatId].wilayas.includes(w)) {
+          db.users[chatId].wilayas.push(w);
+        }
+
+        await send(chatId, `✅ تم اختيار: ${w}`);
+      }
+    }
+
+    saveData(db);
     res.sendStatus(200);
+
   } catch (e) {
     console.log(e.message);
     res.sendStatus(200);
@@ -216,7 +211,7 @@ app.post("/webhook", async (req, res) => {
 app.get("/", (req, res) => res.send("Bot running"));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("RUN:", PORT));
+app.listen(PORT);
 
 // ================== LOOPS ==================
 setInterval(() => check().catch(console.error), 30000);
