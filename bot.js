@@ -1,6 +1,6 @@
 const express = require("express");
 const axios = require("axios");
-const ytDlp = require("yt-dlp-exec");
+const ytdlp = require("yt-dlp-exec");
 
 const app = express();
 app.use(express.json());
@@ -30,18 +30,17 @@ async function sendVideo(chatId, video, caption = "") {
 
     video = video.replace("http://", "https://");
 
-    await axios.post(
-      `${API}/sendVideo`,
-      {
-        chat_id: chatId,
-        video,
-        caption,
-        parse_mode: "HTML"
-      },
-      {
-        timeout: 120000
-      }
-    );
+    await axios.post(`${API}/sendVideo`, {
+      chat_id: chatId,
+      video,
+      caption,
+      parse_mode: "HTML"
+    }, {
+      timeout: 120000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
+    });
+
   } catch (e) {
     console.log("VIDEO ERROR:", e.response?.data || e.message);
     await send(chatId, "❌ فشل إرسال الفيديو");
@@ -119,6 +118,8 @@ async function getInstagram(url) {
       `https://api.neoxr.eu/api/igdl?url=${encodeURIComponent(url)}&apikey=free`
     );
 
+    const d = res.data;
+
     return {
       type: "Instagram",
       author: "Instagram",
@@ -126,7 +127,7 @@ async function getInstagram(url) {
       country: "Unknown",
       likes: 0,
       views: 0,
-      video: res.data?.data?.[0]?.url?.replace("http://", "https://")
+      video: d.data?.[0]?.url?.replace("http://", "https://")
     };
   } catch (e) {
     console.log("IG ERROR:", e.message);
@@ -141,6 +142,8 @@ async function getFacebook(url) {
       `https://api.neoxr.eu/api/fb?url=${encodeURIComponent(url)}&apikey=free`
     );
 
+    const d = res.data;
+
     return {
       type: "Facebook",
       author: "Facebook",
@@ -149,8 +152,8 @@ async function getFacebook(url) {
       likes: 0,
       views: 0,
       video:
-        res.data?.data?.hd ||
-        res.data?.data?.sd
+        d.data?.hd?.replace("http://", "https://") ||
+        d.data?.sd?.replace("http://", "https://")
     };
   } catch (e) {
     console.log("FB ERROR:", e.message);
@@ -158,32 +161,25 @@ async function getFacebook(url) {
   }
 }
 
-// ================= YOUTUBE (REAL yt-dlp) =================
+// ================= YOUTUBE (yt-dlp) =================
 async function getYouTube(url) {
   try {
-    const result = await ytDlp(url, {
-      dumpSingleJson: true,
-      noWarnings: true,
-      noCheckCertificates: true,
-      preferFreeFormats: true
+    const info = await ytdlp(url, {
+      dumpSingleJson: true
     });
 
-    const formats = result.formats || [];
-
-    const best = formats
-      .filter(f => f.url && f.ext === "mp4")
-      .sort((a, b) => (b.height || 0) - (a.height || 0))[0];
-
-    if (!best) return null;
+    const format =
+      info.formats?.find(f => f.url && f.vcodec !== "none") ||
+      info.formats?.[0];
 
     return {
       type: "YouTube",
-      author: result.uploader || "YouTube",
-      nickname: result.title || "Video",
+      author: info.uploader || "YouTube",
+      nickname: info.title || "Video",
       country: "Unknown",
       likes: 0,
-      views: result.view_count || 0,
-      video: best.url
+      views: info.view_count || 0,
+      video: format?.url || null
     };
 
   } catch (e) {
@@ -196,75 +192,81 @@ async function getYouTube(url) {
 app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 
-  const u = req.body;
+  try {
+    const u = req.body;
 
-  const message = u.message;
-  const callback = u.callback_query;
+    const message = u.message;
+    const callback = u.callback_query;
 
-  const chatId =
-    message?.chat?.id ||
-    callback?.message?.chat?.id;
+    const chatId =
+      message?.chat?.id ||
+      callback?.message?.chat?.id;
 
-  if (!chatId) return;
+    if (!chatId) return;
 
-  const text = message?.text || "";
+    const text = message?.text || "";
 
-  // ================= START =================
-  if (message && text === "/start") {
-    return send(
-      chatId,
+    // START
+    if (message && text === "/start") {
+      return send(chatId,
 `🎬 <b>MEDIA DOWNLOADER PRO</b>
 
-📥 TikTok - Instagram - Facebook - YouTube
+📥 TikTok
+📥 Instagram
+📥 Facebook
+📥 YouTube
 
-📌 أرسل رابط فيديو`,
-      menu()
-    );
-  }
-
-  // ================= CALLBACK =================
-  if (callback) {
-    await answerCallback(callback.id);
-
-    if (callback.data === "help") {
-      return send(chatId, "📌 أرسل رابط فيديو من أي منصة");
+📌 أرسل رابط الفيديو`,
+menu());
     }
 
-    return send(chatId, "📌 أرسل الرابط الآن");
-  }
+    // CALLBACK
+    if (callback) {
+      await answerCallback(callback.id);
 
-  // ================= URL =================
-  if (message && /^https?:\/\//i.test(text)) {
-    await send(chatId, "⏳ جاري المعالجة...");
+      if (callback.data === "help") {
+        return send(chatId,
+`📌 أرسل رابط فيديو من:
+TikTok / Instagram / Facebook / YouTube`);
+      }
 
-    const type = detect(text);
-
-    let data = null;
-
-    if (type === "tiktok") data = await getTikTok(text);
-    else if (type === "instagram") data = await getInstagram(text);
-    else if (type === "facebook") data = await getFacebook(text);
-    else if (type === "youtube") data = await getYouTube(text);
-
-    if (!data) return send(chatId, "❌ فشل التحميل");
-
-    if (!data.video) {
-      return send(chatId, `⚠ ${data.type} غير مدعوم`);
+      return send(chatId, "📌 أرسل رابط الفيديو");
     }
 
-    return sendVideo(
-      chatId,
-      data.video,
+    // URL
+    if (message && /^https?:\/\//i.test(text)) {
+
+      await send(chatId, "⏳ جاري التحميل...");
+
+      const type = detect(text);
+
+      let data = null;
+
+      if (type === "tiktok") data = await getTikTok(text);
+      else if (type === "instagram") data = await getInstagram(text);
+      else if (type === "facebook") data = await getFacebook(text);
+      else if (type === "youtube") data = await getYouTube(text);
+
+      if (!data) return send(chatId, "❌ فشل التحميل");
+
+      if (!data.video) return send(chatId, `⚠ ${data.type} غير مدعوم`);
+
+      return sendVideo(chatId, data.video,
 `🎬 <b>${data.type}</b>
 
 👤 ${data.author}
 📛 ${data.nickname}
-👁 ${data.views}`
-    );
-  }
+🌍 ${data.country}
+❤️ ${data.likes}
+👁 ${data.views}`);
+    }
 
-  if (message) {
-    return send(chatId, "🤖 أرسل رابط صحيح");
+    if (message) {
+      return send(chatId, "🤖 أرسل رابط صحيح");
+    }
+
+  } catch (e) {
+    console.log("ERROR:", e.message);
   }
 });
 
@@ -273,6 +275,9 @@ app.get("/", (req, res) => {
   res.send("🚀 BOT RUNNING");
 });
 
-// ================= SERVER =================
+// ================= START =================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("RUNNING ON", PORT));
+
+app.listen(PORT, () =>
+  console.log("RUNNING ON", PORT)
+);
