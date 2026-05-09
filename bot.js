@@ -10,11 +10,17 @@ app.use(express.json());
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ================== API ==================
-const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
+// ================== OFFICIAL API ==================
+const API_URL =
+  "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
 // ================== IPTV ==================
-const TV_STREAM = "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
+const TV_STREAM =
+  "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
+
+// ================== DOMAIN ==================
+const DOMAIN =
+  "https://botadh.onrender.com";
 
 // ================== WILAYAS ==================
 const wilayas = [
@@ -35,78 +41,40 @@ const wilayas = [
 const dataFile = "./data.json";
 
 function loadData() {
-
   if (!fs.existsSync(dataFile)) {
-
     fs.writeFileSync(
       dataFile,
-      JSON.stringify({
-        users: {},
-        last: {}
-      })
+      JSON.stringify({ users: {}, last: {} }, null, 2)
     );
   }
-
   return JSON.parse(fs.readFileSync(dataFile));
 }
 
 function saveData(data) {
-  fs.writeFileSync(
-    dataFile,
-    JSON.stringify(data, null, 2)
-  );
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
 // ================== SEND ==================
 async function send(chatId, text, options = {}) {
-
   try {
-
-    await axios.post(
-      `${API}/sendMessage`,
-      {
-        chat_id: chatId,
-        text,
-        ...options
-      }
-    );
-
+    await axios.post(`${API}/sendMessage`, {
+      chat_id: chatId,
+      text,
+      ...options
+    });
   } catch (e) {
-
-    console.log(
-      "send error:",
-      e.message
-    );
+    console.log("send error:", e.message);
   }
 }
 
 // ================== MENU ==================
 function mainMenu() {
-
   return {
     reply_markup: {
       inline_keyboard: [
-
-        [
-          {
-            text: "📍 اختيار ولاية",
-            callback_data: "choose"
-          }
-        ],
-
-        [
-          {
-            text: "🌍 كل الولايات",
-            callback_data: "all"
-          }
-        ],
-
-        [
-          {
-            text: "📺 تشغيل البث",
-            callback_data: "tv"
-          }
-        ]
+        [{ text: "📍 اختيار ولاية", callback_data: "choose" }],
+        [{ text: "🌍 كل الولايات", callback_data: "all" }],
+        [{ text: "📺 البث", callback_data: "tv" }]
       ]
     }
   };
@@ -114,51 +82,43 @@ function mainMenu() {
 
 // ================== API ==================
 async function getWilayaStatus() {
-
   try {
-
-    const res = await axios.get(
-      API_URL,
-      {
-        timeout: 20000,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "Mozilla/5.0"
-        }
-      }
-    );
-
+    const res = await axios.get(API_URL, {
+      timeout: 20000,
+      headers: { Accept: "application/json" }
+    });
     return res.data || [];
-
   } catch (e) {
-
-    console.log(
-      "API error:",
-      e.message
-    );
-
+    console.log("API error:", e.message);
     return [];
   }
 }
 
-// ================== CHECK ==================
+// ================== STRONG CHECK ==================
+function isOpen(w) {
+  return (
+    w.available === true ||
+    w.open === true ||
+    w.status === "OPEN" ||
+    (w.remaining && w.remaining > 0) ||
+    (w.quota && w.quota > 0)
+  );
+}
+
+// ================== CHECK LOOP ==================
 async function check() {
 
   const data = loadData();
-
-  const apiData =
-    await getWilayaStatus();
+  const apiData = await getWilayaStatus();
 
   if (!Array.isArray(apiData)) return;
 
   for (let userId in data.users) {
 
     const user = data.users[userId];
-
     if (!user) continue;
 
-    const selected =
-      user.wilayas || [];
+    const selected = user.wilayas || [];
 
     for (let wName of selected) {
 
@@ -168,45 +128,34 @@ async function check() {
 
       if (!w) continue;
 
-      const available = w.available;
-
-      console.log(
-        wName,
-        available
-      );
+      const open = isOpen(w);
 
       if (!data.last[userId]) {
         data.last[userId] = {};
       }
 
-      if (
-        !data.last[userId][wName]
-      ) {
-        data.last[userId][wName] =
-          "closed";
+      if (!data.last[userId][wName]) {
+        data.last[userId][wName] = "closed";
       }
 
-      // ===== OPEN =====
+      // ===== OPEN ALERT =====
       if (
-        available &&
-        data.last[userId][wName]
-          === "closed"
+        open &&
+        data.last[userId][wName] === "closed"
       ) {
+        data.last[userId][wName] = "open";
 
-        data.last[userId][wName] =
-          "open";
+        console.log("OPEN:", wName);
 
         await send(
           userId,
-          `🚨 فتح التسجيل في:\n${wName}`
+          `🚨 فتح التسجيل:\n${wName}`
         );
       }
 
-      // ===== CLOSED =====
-      if (!available) {
-
-        data.last[userId][wName] =
-          "closed";
+      // ===== RESET =====
+      if (!open) {
+        data.last[userId][wName] = "closed";
       }
     }
   }
@@ -214,386 +163,140 @@ async function check() {
   saveData(data);
 }
 
-// ================== HEARTBEAT ==================
+// ================== HEARTBEAT (مرة كل 5 دقائق فقط) ==================
 async function heartbeat() {
-
   const data = loadData();
 
   for (let userId in data.users) {
-
-    const count =
-      (
-        data.users[userId]
-          .wilayas || []
-      ).length;
-
-    await send(
-      userId,
-      `✅ البوت يعمل بشكل طبيعي
-
-📡 المراقبة شغالة
-
-📍 عدد الولايات:
-${count}
-
-⏰ ${new Date()
-.toLocaleTimeString("ar-DZ")}`
-    );
+    try {
+      await send(
+        userId,
+        `✅ البوت يعمل\n⏰ ${new Date().toLocaleTimeString()}`
+      );
+    } catch (e) {
+      console.log("heartbeat error:", e.message);
+    }
   }
 }
 
 // ================== WEBHOOK ==================
-app.post(
-  "/webhook",
-  async (req, res) => {
+app.post("/webhook", async (req, res) => {
 
-    const data = loadData();
+  const data = loadData();
 
-    try {
+  try {
 
-      const update = req.body;
+    const update = req.body;
 
-      // ================== MESSAGE ==================
-      if (update.message) {
+    if (update.message) {
 
-        const chatId =
-          update.message.chat.id;
+      const chatId = update.message.chat.id;
+      const text = update.message.text || "";
+      const name = update.message.from.first_name || "User";
 
-        const text =
-          update.message.text || "";
+      if (!data.users[chatId]) {
+        data.users[chatId] = { wilayas: [] };
+      }
 
-        const name =
-          update.message.from
-          .first_name || "User";
+      if (text === "/start") {
+        await send(chatId, `👋 مرحبا ${name}`, mainMenu());
+      }
+
+      else if (text === "/wilayas") {
+        await send(chatId, wilayas.join(" • "));
+      }
+
+      else if (text === "/tv") {
+        await send(chatId, "📺 البث", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "▶ تشغيل", url: `${DOMAIN}/player` }]
+            ]
+          }
+        });
+      }
+
+      saveData(data);
+    }
+
+    if (update.callback_query) {
+
+      const chatId = update.callback_query.message.chat.id;
+      const cb = update.callback_query.data;
+
+      await axios.post(`${API}/answerCallbackQuery`, {
+        callback_query_id: update.callback_query.id
+      });
+
+      if (cb === "all") {
+        data.users[chatId] = { wilayas: [...wilayas] };
+        await send(chatId, "✅ كل الولايات مفعلة");
+      }
+
+      if (cb === "choose") {
+        const buttons = wilayas.map(w => ([{
+          text: w,
+          callback_data: `wilaya_${w}`
+        }]));
+
+        await send(chatId, "📍 اختر:", {
+          reply_markup: { inline_keyboard: buttons }
+        });
+      }
+
+      if (cb === "tv") {
+        await send(chatId, "📺 تشغيل", {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "▶ فتح", url: `${DOMAIN}/player` }]
+            ]
+          }
+        });
+      }
+
+      if (cb.startsWith("wilaya_")) {
+
+        const w = cb.replace("wilaya_", "");
 
         if (!data.users[chatId]) {
-
-          data.users[chatId] = {
-            wilayas: []
-          };
+          data.users[chatId] = { wilayas: [] };
         }
 
-        // ===== START =====
-        if (text === "/start") {
-
-          await send(
-            chatId,
-            `👋 مرحبا ${name}
-
-🤖 بوت مراقبة الأضاحي + IPTV
-
-اختر ما تريد:`,
-            mainMenu()
-          );
+        if (!data.users[chatId].wilayas.includes(w)) {
+          data.users[chatId].wilayas.push(w);
         }
 
-        // ===== WILAYAS =====
-        else if (
-          text === "/wilayas"
-        ) {
-
-          await send(
-            chatId,
-            wilayas.join(" • ")
-          );
-        }
-
-        // ===== STATUS =====
-        else if (
-          text === "/status"
-        ) {
-
-          const selected =
-            data.users[chatId]
-              .wilayas || [];
-
-          if (
-            selected.length === 0
-          ) {
-
-            await send(
-              chatId,
-              "❌ لم تختر أي ولاية"
-            );
-
-          } else {
-
-            await send(
-              chatId,
-              `📍 الولايات المفعلة:
-
-${selected.join("\n")}`
-            );
-          }
-        }
-
-        // ===== TV =====
-        else if (
-          text === "/tv"
-        ) {
-
-          const PLAYER_URL =
-            "https://botadh.onrender.com/player";
-
-          await send(
-            chatId,
-            "📺 تشغيل القناة",
-            {
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: "▶ تشغيل",
-                      url: PLAYER_URL
-                    }
-                  ]
-                ]
-              }
-            }
-          );
-        }
-
-        // ===== HELP =====
-        else if (
-          text === "/help"
-        ) {
-
-          await send(
-            chatId,
-`📌 الأوامر:
-
-/start
-تشغيل البوت
-
-/wilayas
-عرض الولايات
-
-/status
-الولايات المفعلة
-
-/tv
-تشغيل IPTV`
-          );
-        }
-
-        // ===== ANY =====
-        else {
-
-          await send(
-            chatId,
-            `👋 أهلا ${name}
-
-✅ البوت يعمل
-
-اكتب /start`
-          );
-        }
-
-        saveData(data);
+        await send(chatId, `✅ تم اختيار: ${w}`);
       }
 
-      // ================== CALLBACK ==================
-      if (
-        update.callback_query
-      ) {
-
-        const chatId =
-          update.callback_query
-          .message.chat.id;
-
-        const cb =
-          update.callback_query.data;
-
-        await axios.post(
-          `${API}/answerCallbackQuery`,
-          {
-            callback_query_id:
-              update.callback_query.id
-          }
-        );
-
-        // ===== ALL =====
-        if (cb === "all") {
-
-          data.users[chatId] = {
-            wilayas: [...wilayas]
-          };
-
-          saveData(data);
-
-          await send(
-            chatId,
-            `✅ تم تفعيل جميع الولايات
-
-🚨 ستصلك إشعارات عند فتح أي ولاية`
-          );
-        }
-
-        // ===== CHOOSE =====
-        if (cb === "choose") {
-
-          const buttons =
-            wilayas.map(w => ([
-
-              {
-                text: w,
-                callback_data:
-                  `wilaya_${w}`
-              }
-
-            ]));
-
-          await send(
-            chatId,
-            "📍 اختر ولايتك:",
-            {
-              reply_markup: {
-                inline_keyboard:
-                  buttons
-              }
-            }
-          );
-        }
-
-        // ===== TV =====
-        if (cb === "tv") {
-
-          const PLAYER_URL =
-            "https://botadh.onrender.com/player";
-
-          await send(
-            chatId,
-            "📺 تشغيل القناة",
-            {
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: "▶ تشغيل",
-                      url: PLAYER_URL
-                    }
-                  ]
-                ]
-              }
-            }
-          );
-        }
-
-        // ===== SELECT =====
-        if (
-          cb.startsWith(
-            "wilaya_"
-          )
-        ) {
-
-          const w =
-            cb.replace(
-              "wilaya_",
-              ""
-            );
-
-          if (
-            !data.users[chatId]
-          ) {
-
-            data.users[chatId] = {
-              wilayas: []
-            };
-          }
-
-          if (
-            !data.users[chatId]
-              .wilayas.includes(w)
-          ) {
-
-            data.users[chatId]
-              .wilayas.push(w);
-          }
-
-          saveData(data);
-
-          await send(
-            chatId,
-            `✅ تم اختيار:
-
-${w}`
-          );
-        }
-      }
-
-      res.sendStatus(200);
-
-    } catch (e) {
-
-      console.log(
-        "webhook error:",
-        e.message
-      );
-
-      res.sendStatus(200);
+      saveData(data);
     }
+
+    res.sendStatus(200);
+
+  } catch (e) {
+    console.log("error:", e.message);
+    res.sendStatus(200);
   }
-);
+});
 
 // ================== PLAYER ==================
-app.get(
-  "/player",
-  (req, res) => {
-
-    res.sendFile(
-      path.join(
-        __dirname,
-        "player.html"
-      )
-    );
-  }
-);
-
-// ================== HOME ==================
-app.get("/", (req, res) => {
-  res.send("Bot running");
+app.get("/player", (req, res) => {
+  res.sendFile(path.join(__dirname, "player.html"));
 });
 
 // ================== SERVER ==================
-const PORT =
-  process.env.PORT || 3000;
+app.get("/", (req, res) => res.send("Bot running"));
 
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("🚀 Running on", PORT));
 
-  console.log(
-    "🚀 Running on",
-    PORT
-  );
-});
+// ================== LOOPS ==================
+setInterval(() => check().catch(console.error), 30000);
 
-// ================== LOOP ==================
+// ⚠️ إشعار طمأنة كل 5 دقائق (اختياري)
+setInterval(() => heartbeat().catch(console.error), 300000);
 
-// ===== CHECK =====
-setInterval(() => {
-
-  check().catch(
-    console.error
-  );
-
-}, 30000);
-
-// ===== HEARTBEAT =====
-let lastHeartbeat = 0;
-
-setInterval(async () => {
-
-  const now = Date.now();
-
-  if (
-    now - lastHeartbeat >=
-    300000
-  ) {
-
-    lastHeartbeat = now;
-
-    await heartbeat().catch(
-      console.error
-    );
-  }
-
-}, 60000);
+// ================== CRASH SAFE ==================
+process.on("uncaughtException", e => console.log(e));
+process.on("unhandledRejection", e => console.log(e));
