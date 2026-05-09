@@ -22,7 +22,7 @@ async function send(chatId, text, options = {}) {
   }
 }
 
-// ================== ANSWER CALLBACK ==================
+// ================== CALLBACK ==================
 async function answerCallback(id) {
   try {
     await axios.post(`${API}/answerCallbackQuery`, {
@@ -31,7 +31,7 @@ async function answerCallback(id) {
   } catch {}
 }
 
-// ================== TIKTOK API (FIXED) ==================
+// ================== TIKTOK API ==================
 async function getTikTok(url) {
   try {
     const res = await axios.get(
@@ -45,6 +45,7 @@ async function getTikTok(url) {
     return {
       author: data.author?.unique_id || "Unknown",
       nickname: data.author?.nickname || "Unknown",
+      country: data.region || "Unknown 🌍",   // 👈 بلد الحساب
       likes: data.digg_count || 0,
       views: data.play_count || 0,
       download: data.play || null
@@ -70,7 +71,7 @@ function menu() {
 
 // ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
-  res.sendStatus(200); // مهم جدًا
+  res.sendStatus(200);
 
   try {
     const u = req.body;
@@ -93,7 +94,8 @@ app.post("/webhook", async (req, res) => {
 
 📌 أرسل أي رابط TikTok وسأقوم بـ:
 • تحميل الفيديو بدون علامة مائية
-• عرض معلومات الحساب`
+• عرض معلومات الحساب
+• عرض بلد الحساب 🌍`
       , menu());
     }
 
@@ -106,11 +108,11 @@ app.post("/webhook", async (req, res) => {
       }
 
       if (callback.data === "test") {
-        return send(chatId, "✅ الأزرار تعمل بشكل صحيح");
+        return send(chatId, "✅ البوت يعمل بشكل صحيح");
       }
     }
 
-    // ================== TIKTOK LINK ==================
+    // ================== TIKTOK ==================
     if (message && text.includes("tiktok.com")) {
       await send(chatId, "⏳ جاري التحميل...");
 
@@ -125,6 +127,7 @@ app.post("/webhook", async (req, res) => {
 
 👤 الحساب: ${data.author}
 📛 الاسم: ${data.nickname}
+🌍 البلد: ${data.country}
 ❤️ إعجابات: ${data.likes}
 👁 مشاهدات: ${data.views}
 
@@ -145,7 +148,7 @@ ${data.download}`
 
 // ================== HOME ==================
 app.get("/", (req, res) => {
-  res.send("🚀 BOT RUNNING PRO FIXED");
+  res.send("🚀 BOT RUNNING PRO FULL");
 });
 
 // ================== SERVER ==================
