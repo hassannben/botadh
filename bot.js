@@ -11,7 +11,11 @@ const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
 const FILE = "./data.json";
 
-// ================== SAFE DB ==================
+// ================== HEARTBEAT CONTROL ==================
+const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 min
+const lastHeartbeat = {};
+
+// ================== DB ==================
 function load() {
   if (!fs.existsSync(FILE)) {
     fs.writeFileSync(FILE, JSON.stringify({ users: {}, state: {}, snapshot: {} }, null, 2));
@@ -30,7 +34,9 @@ async function send(chatId, text) {
       chat_id: chatId,
       text
     });
-  } catch {}
+  } catch (e) {
+    console.log("send error:", e.message);
+  }
 }
 
 // ================== NORMALIZE ==================
@@ -43,7 +49,7 @@ function norm(s) {
     .trim();
 }
 
-// ================== API FETCH (RESILIENT) ==================
+// ================== API ==================
 async function fetchAPI() {
   try {
     const res = await axios.get(API_URL, { timeout: 12000 });
@@ -53,7 +59,7 @@ async function fetchAPI() {
   }
 }
 
-// ================== OPEN CHECK ==================
+// ================== CHECK OPEN ==================
 function isOpen(w) {
   return (
     w?.available === true ||
@@ -62,7 +68,7 @@ function isOpen(w) {
   );
 }
 
-// ================== MATCH ENGINE ==================
+// ================== MATCH ==================
 function match(apiItem, selected) {
   const a = norm(apiItem?.wilayaNameAr);
   const b = norm(apiItem?.wilayaNameFr);
@@ -71,7 +77,7 @@ function match(apiItem, selected) {
   return a === s || b === s || a.includes(s) || s.includes(a);
 }
 
-// ================== ULTRA CORE ==================
+// ================== MAIN CHECK ==================
 async function check() {
   const db = load();
   const api = await fetchAPI();
@@ -83,7 +89,6 @@ async function check() {
     const list = user?.wilayas || [];
 
     for (const wilaya of list) {
-
       const found = api.find(x => match(x, wilaya));
       if (!found) continue;
 
@@ -92,38 +97,31 @@ async function check() {
       if (!db.state[userId]) db.state[userId] = {};
       if (!db.snapshot[userId]) db.snapshot[userId] = {};
 
-      const prevState = db.state[userId][wilaya];
-      const lastSnap = db.snapshot[userId][wilaya];
+      const prev = db.state[userId][wilaya];
+      const snap = db.snapshot[userId][wilaya];
 
-      // ================== NO CHANGE = SKIP ==================
-      if (lastSnap === open) continue;
-
+      // skip if no change
+      if (snap === open) continue;
       db.snapshot[userId][wilaya] = open;
 
-      // ================== FIRST TIME ==================
-      if (!prevState) {
+      // first time
+      if (!prev) {
         db.state[userId][wilaya] = open ? "open" : "closed";
         continue;
       }
 
-      // ================== OPEN EVENT ==================
-      if (open && prevState !== "open") {
+      // OPEN EVENT
+      if (open && prev !== "open") {
         db.state[userId][wilaya] = "open";
 
-        await send(
-          userId,
-          `🚨 فتح التسجيل الآن:\n📍 ${wilaya}`
-        );
+        await send(userId, `🚨 فتح التسجيل:\n📍 ${wilaya}`);
       }
 
-      // ================== CLOSE EVENT ==================
-      if (!open && prevState === "open") {
+      // CLOSE EVENT
+      if (!open && prev === "open") {
         db.state[userId][wilaya] = "closed";
 
-        await send(
-          userId,
-          `⛔ تم إغلاق التسجيل:\n📍 ${wilaya}`
-        );
+        await send(userId, `⛔ إغلاق التسجيل:\n📍 ${wilaya}`);
       }
     }
   }
@@ -131,26 +129,44 @@ async function check() {
   save(db);
 }
 
-// ================== WATCHDOG (AUTO RECOVERY) ==================
+// ================== SAFE HEARTBEAT (NO SPAM) ==================
+async function safeHeartbeat() {
+  const db = load();
+  const now = Date.now();
+
+  for (const userId in db.users) {
+
+    if (
+      lastHeartbeat[userId] &&
+      now - lastHeartbeat[userId] < HEARTBEAT_INTERVAL
+    ) continue;
+
+    try {
+      await send(
+        userId,
+        `🟢 البوت يعمل بشكل طبيعي\n⏰ ${new Date().toLocaleTimeString()}`
+      );
+
+      lastHeartbeat[userId] = now;
+    } catch (e) {
+      console.log("heartbeat error:", e.message);
+    }
+  }
+}
+
+// ================== WATCHDOG ==================
 async function watchdog() {
   try {
     await check();
   } catch (e) {
-    console.log("WATCHDOG RECOVER:", e.message);
+    console.log("WATCHDOG ERROR:", e.message);
   }
 }
 
-// ================== HEART ==================
-async function heartbeat() {
-  const db = load();
+// ================== LOOP ==================
+setInterval(watchdog, 8000);       // فحص سريع
+setInterval(safeHeartbeat, 60000); // تشغيل كل دقيقة (لكن الإرسال كل 5 دق)
 
-  for (const id in db.users) {
-    await send(id, "🟢 ULTRA INFRA BOT يعمل بشكل طبيعي");
-  }
-}
-
-// ================== LOOP ENGINE ==================
-setInterval(watchdog, 8000); // 🔥 أسرع + مستقر
 
 // ================== KEEP ALIVE ==================
 setInterval(async () => {
@@ -161,12 +177,12 @@ setInterval(async () => {
 
 // ================== SERVER ==================
 app.get("/", (req, res) => {
-  res.send("🚀 ULTRA INFRA BOT ACTIVE");
+  res.send("🚀 ULTRA BOT ACTIVE");
 });
 
-app.listen(process.env.PORT || 3000, () =>
-  console.log("🚀 ULTRA INFRA RUNNING")
-);
+app.listen(process.env.PORT || 3000, () => {
+  console.log("🚀 RUNNING");
+});
 
 // ================== SAFETY ==================
 process.on("uncaughtException", e => console.log("CRASH:", e.message));
