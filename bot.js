@@ -5,54 +5,75 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
+// ================== TELEGRAM ==================
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
+
+// ================== API ==================
 const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
-const FILE = "./data.json";
+// ================== CONFIG ==================
+const CHECK_INTERVAL = 30000;
+const HEARTBEAT_INTERVAL = 300000;
 
-// ================== HEARTBEAT CONTROL ==================
-const HEARTBEAT_INTERVAL = 5 * 60 * 1000; // 5 min
-const lastHeartbeat = {};
+// ================== WILAYAS ==================
+const wilayas = [
+  "أدرار","الشلف","الأغواط","أم البواقي","باتنة",
+  "بجاية","بسكرة","بشار","البليدة","البويرة",
+  "تمنراست","تبسة","تلمسان","تيارت","تيزي وزو",
+  "الجزائر","الجلفة","جيجل","سطيف","سعيدة",
+  "سكيكدة","سيدي بلعباس","عنابة","قالمة","قسنطينة",
+  "المدية","مستغانم","المسيلة","معسكر","ورقلة",
+  "وهران","البيض","إليزي","برج بوعريريج","بومرداس",
+  "الطارف","تندوف","تيسمسيلت","الوادي","خنشلة",
+  "سوق أهراس","تيبازة","ميلة","عين الدفلى","النعامة",
+  "عين تموشنت","غرداية","غليزان","المغير","المنيعة",
+  "أولاد جلال","بني عباس","إن صالح","إن قزام","توقرت","جانت"
+];
 
-// ================== DB ==================
+// ================== STORAGE ==================
+const file = "./data.json";
+
 function load() {
-  if (!fs.existsSync(FILE)) {
-    fs.writeFileSync(FILE, JSON.stringify({ users: {}, state: {}, snapshot: {} }, null, 2));
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, JSON.stringify({ users: {}, last: {} }, null, 2));
   }
-  return JSON.parse(fs.readFileSync(FILE));
+  return JSON.parse(fs.readFileSync(file));
 }
 
 function save(d) {
-  fs.writeFileSync(FILE, JSON.stringify(d, null, 2));
+  fs.writeFileSync(file, JSON.stringify(d, null, 2));
 }
 
-// ================== TELEGRAM ==================
-async function send(chatId, text) {
+// ================== SEND ==================
+async function send(chatId, text, options = {}) {
   try {
     await axios.post(`${API}/sendMessage`, {
       chat_id: chatId,
-      text
+      text,
+      ...options
     });
   } catch (e) {
     console.log("send error:", e.message);
   }
 }
 
-// ================== NORMALIZE ==================
-function norm(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+// ================== MENU (نفس السابق) ==================
+function menu() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📍 اختيار ولاية", callback_data: "choose" }],
+        [{ text: "🌍 كل الولايات", callback_data: "all" }]
+      ]
+    }
+  };
 }
 
 // ================== API ==================
-async function fetchAPI() {
+async function getData() {
   try {
-    const res = await axios.get(API_URL, { timeout: 12000 });
+    const res = await axios.get(API_URL);
     return Array.isArray(res.data) ? res.data : [];
   } catch {
     return [];
@@ -61,67 +82,34 @@ async function fetchAPI() {
 
 // ================== CHECK OPEN ==================
 function isOpen(w) {
-  return (
-    w?.available === true ||
-    Number(w?.remainingQuota ?? 0) > 0 ||
-    Number(w?.remaining ?? 0) > 0
-  );
+  return w?.available === true || Number(w?.remainingQuota) > 0;
 }
 
-// ================== MATCH ==================
-function match(apiItem, selected) {
-  const a = norm(apiItem?.wilayaNameAr);
-  const b = norm(apiItem?.wilayaNameFr);
-  const s = norm(selected);
-
-  return a === s || b === s || a.includes(s) || s.includes(a);
-}
-
-// ================== MAIN CHECK ==================
+// ================== CHECK LOOP ==================
 async function check() {
   const db = load();
-  const api = await fetchAPI();
-
-  if (!api.length) return;
+  const api = await getData();
 
   for (const userId in db.users) {
     const user = db.users[userId];
-    const list = user?.wilayas || [];
+    const selected = user.wilayas || [];
 
-    for (const wilaya of list) {
-      const found = api.find(x => match(x, wilaya));
-      if (!found) continue;
+    for (const name of selected) {
+      const w = api.find(x => x.wilayaNameAr?.trim() === name?.trim());
+      if (!w) continue;
 
-      const open = isOpen(found);
+      const open = isOpen(w);
 
-      if (!db.state[userId]) db.state[userId] = {};
-      if (!db.snapshot[userId]) db.snapshot[userId] = {};
+      if (!db.last[userId]) db.last[userId] = {};
+      if (db.last[userId][name] === undefined) db.last[userId][name] = false;
 
-      const prev = db.state[userId][wilaya];
-      const snap = db.snapshot[userId][wilaya];
-
-      // skip if no change
-      if (snap === open) continue;
-      db.snapshot[userId][wilaya] = open;
-
-      // first time
-      if (!prev) {
-        db.state[userId][wilaya] = open ? "open" : "closed";
-        continue;
+      if (open && !db.last[userId][name]) {
+        db.last[userId][name] = true;
+        await send(userId, `🚨 فتح التسجيل:\n${name}`);
       }
 
-      // OPEN EVENT
-      if (open && prev !== "open") {
-        db.state[userId][wilaya] = "open";
-
-        await send(userId, `🚨 فتح التسجيل:\n📍 ${wilaya}`);
-      }
-
-      // CLOSE EVENT
-      if (!open && prev === "open") {
-        db.state[userId][wilaya] = "closed";
-
-        await send(userId, `⛔ إغلاق التسجيل:\n📍 ${wilaya}`);
+      if (!open) {
+        db.last[userId][name] = false;
       }
     }
   }
@@ -129,61 +117,97 @@ async function check() {
   save(db);
 }
 
-// ================== SAFE HEARTBEAT (NO SPAM) ==================
-async function safeHeartbeat() {
+// ================== HEARTBEAT ==================
+async function heartbeat() {
   const db = load();
-  const now = Date.now();
 
-  for (const userId in db.users) {
+  for (const id in db.users) {
+    if (!db.users[id].lastHB) db.users[id].lastHB = 0;
 
-    if (
-      lastHeartbeat[userId] &&
-      now - lastHeartbeat[userId] < HEARTBEAT_INTERVAL
-    ) continue;
+    const now = Date.now();
+    if (now - db.users[id].lastHB < HEARTBEAT_INTERVAL) continue;
 
-    try {
-      await send(
-        userId,
-        `🟢 البوت يعمل بشكل طبيعي\n⏰ ${new Date().toLocaleTimeString()}`
-      );
+    await send(id, "✅ البوت يعمل بشكل طبيعي");
+    db.users[id].lastHB = now;
+  }
 
-      lastHeartbeat[userId] = now;
-    } catch (e) {
-      console.log("heartbeat error:", e.message);
+  save(db);
+}
+
+// ================== WEBHOOK ==================
+app.post("/webhook", async (req, res) => {
+  const db = load();
+
+  try {
+    const u = req.body;
+
+    if (u.message) {
+      const chatId = u.message.chat.id;
+      const text = u.message.text || "";
+
+      if (!db.users[chatId]) {
+        db.users[chatId] = { wilayas: [], lastHB: 0 };
+      }
+
+      // ===== START =====
+      if (text === "/start") {
+        await send(chatId, "👋 مرحبا", menu());
+      }
+
+      // ===== CALLBACK =====
+      if (u.callback_query) {
+        const cb = u.callback_query.data;
+
+        await axios.post(`${API}/answerCallbackQuery`, {
+          callback_query_id: u.callback_query.id
+        });
+
+        // ALL
+        if (cb === "all") {
+          db.users[chatId].wilayas = [...wilayas];
+          await send(chatId, "✅ كل الولايات مفعلة");
+        }
+
+        // CHOOSE
+        if (cb === "choose") {
+          const buttons = wilayas.map(w => ([{
+            text: w,
+            callback_data: `w_${w}`
+          }]));
+
+          await send(chatId, "📍 اختر ولاية:", {
+            reply_markup: { inline_keyboard: buttons }
+          });
+        }
+
+        // SELECT WILAYA
+        if (cb.startsWith("w_")) {
+          const w = cb.replace("w_", "");
+
+          if (!db.users[chatId].wilayas.includes(w)) {
+            db.users[chatId].wilayas.push(w);
+          }
+
+          await send(chatId, `✅ تم اختيار: ${w}`);
+        }
+      }
+
+      save(db);
     }
-  }
-}
 
-// ================== WATCHDOG ==================
-async function watchdog() {
-  try {
-    await check();
+    res.sendStatus(200);
   } catch (e) {
-    console.log("WATCHDOG ERROR:", e.message);
+    console.log(e.message);
+    res.sendStatus(200);
   }
-}
-
-// ================== LOOP ==================
-setInterval(watchdog, 8000);       // فحص سريع
-setInterval(safeHeartbeat, 60000); // تشغيل كل دقيقة (لكن الإرسال كل 5 دق)
-
-
-// ================== KEEP ALIVE ==================
-setInterval(async () => {
-  try {
-    await axios.get("https://botadh.onrender.com");
-  } catch {}
-}, 60000);
+});
 
 // ================== SERVER ==================
-app.get("/", (req, res) => {
-  res.send("🚀 ULTRA BOT ACTIVE");
-});
+app.get("/", (req, res) => res.send("Bot OK"));
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("🚀 RUNNING");
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("RUN:", PORT));
 
-// ================== SAFETY ==================
-process.on("uncaughtException", e => console.log("CRASH:", e.message));
-process.on("unhandledRejection", e => console.log("PROMISE:", e?.message));
+// ================== LOOPS ==================
+setInterval(() => check().catch(console.error), CHECK_INTERVAL);
+setInterval(() => heartbeat().catch(console.error), HEARTBEAT_INTERVAL);
