@@ -9,7 +9,7 @@ const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // 🔥 رابط API تاعنا
-const TIK_API = "https://YOUR-RENDER-URL.onrender.com/download";
+const TIK_API = "https://botadh.onrender.com/download";
 
 // ================== SEND ==================
 async function send(chatId, text) {
