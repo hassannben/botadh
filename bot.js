@@ -9,26 +9,18 @@ const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 
-const DATA_FILE = "./data.json";
+const FILE = "./data.json";
 
-// ================== SAFE STORAGE ==================
-function loadDB() {
-  try {
-    if (!fs.existsSync(DATA_FILE)) {
-      fs.writeFileSync(DATA_FILE, JSON.stringify({ users: {}, state: {} }, null, 2));
-    }
-    return JSON.parse(fs.readFileSync(DATA_FILE));
-  } catch {
-    return { users: {}, state: {} };
+// ================== SAFE DB ==================
+function load() {
+  if (!fs.existsSync(FILE)) {
+    fs.writeFileSync(FILE, JSON.stringify({ users: {}, state: {}, snapshot: {} }, null, 2));
   }
+  return JSON.parse(fs.readFileSync(FILE));
 }
 
-function saveDB(db) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
-  } catch (e) {
-    console.log("SAVE ERROR:", e.message);
-  }
+function save(d) {
+  fs.writeFileSync(FILE, JSON.stringify(d, null, 2));
 }
 
 // ================== TELEGRAM ==================
@@ -38,9 +30,7 @@ async function send(chatId, text) {
       chat_id: chatId,
       text
     });
-  } catch (e) {
-    console.log("Telegram error:", e.message);
-  }
+  } catch {}
 }
 
 // ================== NORMALIZE ==================
@@ -53,23 +43,13 @@ function norm(s) {
     .trim();
 }
 
-// ================== RETRY API ==================
-async function fetchAPI(retries = 2) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const res = await axios.get(API_URL, {
-        timeout: 12000,
-        headers: { Accept: "application/json" }
-      });
-
-      if (Array.isArray(res.data)) return res.data;
-      return [];
-    } catch (e) {
-      if (i === retries) {
-        console.log("API FAILED");
-        return [];
-      }
-    }
+// ================== API FETCH (RESILIENT) ==================
+async function fetchAPI() {
+  try {
+    const res = await axios.get(API_URL, { timeout: 12000 });
+    return Array.isArray(res.data) ? res.data : [];
+  } catch {
+    return [];
   }
 }
 
@@ -84,19 +64,16 @@ function isOpen(w) {
 
 // ================== MATCH ENGINE ==================
 function match(apiItem, selected) {
-  return (
-    norm(apiItem?.wilayaNameAr) === norm(selected) ||
-    norm(apiItem?.wilayaNameFr) === norm(selected) ||
-    norm(apiItem?.wilayaNameAr).includes(norm(selected)) ||
-    norm(selected).includes(norm(apiItem?.wilayaNameAr))
-  );
+  const a = norm(apiItem?.wilayaNameAr);
+  const b = norm(apiItem?.wilayaNameFr);
+  const s = norm(selected);
+
+  return a === s || b === s || a.includes(s) || s.includes(a);
 }
 
-// ================== CORE ENGINE ==================
-let memoryCache = {}; // يمنع التكرار في runtime
-
+// ================== ULTRA CORE ==================
 async function check() {
-  const db = loadDB();
+  const db = load();
   const api = await fetchAPI();
 
   if (!api.length) return;
@@ -113,61 +90,69 @@ async function check() {
       const open = isOpen(found);
 
       if (!db.state[userId]) db.state[userId] = {};
+      if (!db.snapshot[userId]) db.snapshot[userId] = {};
 
-      const prev = db.state[userId][wilaya];
+      const prevState = db.state[userId][wilaya];
+      const lastSnap = db.snapshot[userId][wilaya];
 
-      const cacheKey = `${userId}:${wilaya}`;
+      // ================== NO CHANGE = SKIP ==================
+      if (lastSnap === open) continue;
 
-      // ================== ANTI DUPLICATE ==================
-      if (memoryCache[cacheKey] === open) continue;
-      memoryCache[cacheKey] = open;
+      db.snapshot[userId][wilaya] = open;
 
-      // ================== FIRST INIT ==================
-      if (!prev) {
+      // ================== FIRST TIME ==================
+      if (!prevState) {
         db.state[userId][wilaya] = open ? "open" : "closed";
         continue;
       }
 
       // ================== OPEN EVENT ==================
-      if (open && prev !== "open") {
+      if (open && prevState !== "open") {
         db.state[userId][wilaya] = "open";
 
         await send(
           userId,
-          `🚨 فتح التسجيل:\n📍 ${wilaya}`
+          `🚨 فتح التسجيل الآن:\n📍 ${wilaya}`
         );
       }
 
       // ================== CLOSE EVENT ==================
-      if (!open && prev === "open") {
+      if (!open && prevState === "open") {
         db.state[userId][wilaya] = "closed";
 
         await send(
           userId,
-          `⛔ تم غلق التسجيل:\n📍 ${wilaya}`
+          `⛔ تم إغلاق التسجيل:\n📍 ${wilaya}`
         );
       }
     }
   }
 
-  saveDB(db);
+  save(db);
 }
 
-// ================== HEARTBEAT ==================
-async function heartbeat() {
-  const db = loadDB();
-
-  for (const id in db.users) {
-    await send(id, "🟢 البوت يعمل بشكل طبيعي");
+// ================== WATCHDOG (AUTO RECOVERY) ==================
+async function watchdog() {
+  try {
+    await check();
+  } catch (e) {
+    console.log("WATCHDOG RECOVER:", e.message);
   }
 }
 
-// ================== AUTO RECOVERY LOOP ==================
-setInterval(() => {
-  check().catch(err => console.log("CHECK ERROR:", err.message));
-}, 10000);
+// ================== HEART ==================
+async function heartbeat() {
+  const db = load();
 
-// ================== KEEP ALIVE (Render fix) ==================
+  for (const id in db.users) {
+    await send(id, "🟢 ULTRA INFRA BOT يعمل بشكل طبيعي");
+  }
+}
+
+// ================== LOOP ENGINE ==================
+setInterval(watchdog, 8000); // 🔥 أسرع + مستقر
+
+// ================== KEEP ALIVE ==================
 setInterval(async () => {
   try {
     await axios.get("https://botadh.onrender.com");
@@ -176,18 +161,13 @@ setInterval(async () => {
 
 // ================== SERVER ==================
 app.get("/", (req, res) => {
-  res.send("🚀 PRO BOT ONLINE");
+  res.send("🚀 ULTRA INFRA BOT ACTIVE");
 });
 
 app.listen(process.env.PORT || 3000, () =>
-  console.log("🚀 BOT STARTED")
+  console.log("🚀 ULTRA INFRA RUNNING")
 );
 
-// ================== SAFE CRASH HANDLERS ==================
-process.on("uncaughtException", err => {
-  console.log("CRASH:", err.message);
-});
-
-process.on("unhandledRejection", err => {
-  console.log("PROMISE ERROR:", err?.message);
-});
+// ================== SAFETY ==================
+process.on("uncaughtException", e => console.log("CRASH:", e.message));
+process.on("unhandledRejection", e => console.log("PROMISE:", e?.message));
