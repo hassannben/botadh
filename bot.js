@@ -8,7 +8,7 @@ app.use(express.json());
 const TOKEN = process.env.BOT_TOKEN;
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ================== SEND MESSAGE ==================
+// ================== SEND TEXT ==================
 async function send(chatId, text, options = {}) {
   try {
     await axios.post(`${API}/sendMessage`, {
@@ -45,10 +45,10 @@ async function getTikTok(url) {
     return {
       author: data.author?.unique_id || "Unknown",
       nickname: data.author?.nickname || "Unknown",
-      country: data.region || "Unknown 🌍",   // 👈 بلد الحساب
+      country: data.region || "Unknown 🌍",
       likes: data.digg_count || 0,
       views: data.play_count || 0,
-      download: data.play || null
+      video: data.play || null
     };
 
   } catch (e) {
@@ -57,7 +57,7 @@ async function getTikTok(url) {
   }
 }
 
-// ================== MENU ==================
+// ================== START MENU ==================
 function menu() {
   return {
     reply_markup: {
@@ -93,7 +93,7 @@ app.post("/webhook", async (req, res) => {
 `👋 مرحبا بك في TikTok Bot PRO
 
 📌 أرسل أي رابط TikTok وسأقوم بـ:
-• تحميل الفيديو بدون علامة مائية
+• تحميل الفيديو مباشرة
 • عرض معلومات الحساب
 • عرض بلد الحساب 🌍`
       , menu());
@@ -108,37 +108,44 @@ app.post("/webhook", async (req, res) => {
       }
 
       if (callback.data === "test") {
-        return send(chatId, "✅ البوت يعمل بشكل صحيح");
+        return send(chatId, "✅ البوت يعمل بشكل ممتاز");
       }
     }
 
-    // ================== TIKTOK ==================
+    // ================== TIKTOK HANDLER ==================
     if (message && text.includes("tiktok.com")) {
       await send(chatId, "⏳ جاري التحميل...");
 
       const data = await getTikTok(text);
 
-      if (!data || !data.download) {
-        return send(chatId, "❌ فشل التحميل - جرب رابط آخر");
+      if (!data || !data.video) {
+        return send(chatId, "❌ فشل التحميل - حاول رابط آخر");
       }
 
-      return send(chatId,
+      // 🔥 إرسال الفيديو داخل تيليغرام
+      try {
+        await axios.post(`${API}/sendVideo`, {
+          chat_id: chatId,
+          video: data.video,
+          caption:
 `🎬 TikTok جاهز:
 
 👤 الحساب: ${data.author}
 📛 الاسم: ${data.nickname}
 🌍 البلد: ${data.country}
 ❤️ إعجابات: ${data.likes}
-👁 مشاهدات: ${data.views}
+👁 مشاهدات: ${data.views}`
+        });
 
-🔗 تحميل الفيديو:
-${data.download}`
-      );
+      } catch (e) {
+        console.log("VIDEO ERROR:", e.message);
+        return send(chatId, "❌ فشل إرسال الفيديو");
+      }
     }
 
     // ================== DEFAULT ==================
     if (message) {
-      return send(chatId, "🤖 أرسل رابط TikTok أو /start");
+      return send(chatId, "🤖 أرسل رابط TikTok أو اكتب /start");
     }
 
   } catch (e) {
@@ -148,7 +155,7 @@ ${data.download}`
 
 // ================== HOME ==================
 app.get("/", (req, res) => {
-  res.send("🚀 BOT RUNNING PRO FULL");
+  res.send("🚀 BOT RUNNING PRO VIDEO");
 });
 
 // ================== SERVER ==================
