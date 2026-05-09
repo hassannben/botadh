@@ -19,8 +19,7 @@ const TV_STREAM =
   "https://sr1.oz-tv.xyz/s1/b_1_HD/index.m3u8";
 
 // ================== DOMAIN ==================
-const DOMAIN =
-  "https://botadh.onrender.com";
+const DOMAIN = "https://botadh.onrender.com";
 
 // ================== WILAYAS ==================
 const wilayas = [
@@ -80,7 +79,7 @@ function mainMenu() {
   };
 }
 
-// ================== API ==================
+// ================== GET API ==================
 async function getWilayaStatus() {
   try {
     const res = await axios.get(API_URL, {
@@ -94,20 +93,19 @@ async function getWilayaStatus() {
   }
 }
 
-// ================== STRONG CHECK ==================
+// ================== STRONG DETECTION ==================
 function isOpen(w) {
   return (
-    w.available === true ||
-    w.open === true ||
-    w.status === "OPEN" ||
-    (w.remaining && w.remaining > 0) ||
-    (w.quota && w.quota > 0)
+    w?.available === true ||
+    w?.open === true ||
+    String(w?.status || "").toLowerCase() === "open" ||
+    Number(w?.remaining) > 0 ||
+    Number(w?.quota) > 0
   );
 }
 
 // ================== CHECK LOOP ==================
 async function check() {
-
   const data = loadData();
   const apiData = await getWilayaStatus();
 
@@ -123,7 +121,9 @@ async function check() {
     for (let wName of selected) {
 
       const w = apiData.find(
-        x => x.wilayaNameAr === wName
+        x =>
+          x.wilayaNameAr?.trim() ===
+          wName?.trim()
       );
 
       if (!w) continue;
@@ -138,7 +138,7 @@ async function check() {
         data.last[userId][wName] = "closed";
       }
 
-      // ===== OPEN ALERT =====
+      // ================== OPEN ==================
       if (
         open &&
         data.last[userId][wName] === "closed"
@@ -153,7 +153,7 @@ async function check() {
         );
       }
 
-      // ===== RESET =====
+      // ================== RESET ==================
       if (!open) {
         data.last[userId][wName] = "closed";
       }
@@ -163,7 +163,7 @@ async function check() {
   saveData(data);
 }
 
-// ================== HEARTBEAT (مرة كل 5 دقائق فقط) ==================
+// ================== HEARTBEAT ==================
 async function heartbeat() {
   const data = loadData();
 
@@ -173,23 +173,18 @@ async function heartbeat() {
         userId,
         `✅ البوت يعمل\n⏰ ${new Date().toLocaleTimeString()}`
       );
-    } catch (e) {
-      console.log("heartbeat error:", e.message);
-    }
+    } catch (e) {}
   }
 }
 
 // ================== WEBHOOK ==================
 app.post("/webhook", async (req, res) => {
-
   const data = loadData();
 
   try {
-
     const update = req.body;
 
     if (update.message) {
-
       const chatId = update.message.chat.id;
       const text = update.message.text || "";
       const name = update.message.from.first_name || "User";
@@ -200,10 +195,6 @@ app.post("/webhook", async (req, res) => {
 
       if (text === "/start") {
         await send(chatId, `👋 مرحبا ${name}`, mainMenu());
-      }
-
-      else if (text === "/wilayas") {
-        await send(chatId, wilayas.join(" • "));
       }
 
       else if (text === "/tv") {
@@ -220,7 +211,6 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (update.callback_query) {
-
       const chatId = update.callback_query.message.chat.id;
       const cb = update.callback_query.data;
 
@@ -255,7 +245,6 @@ app.post("/webhook", async (req, res) => {
       }
 
       if (cb.startsWith("wilaya_")) {
-
         const w = cb.replace("wilaya_", "");
 
         if (!data.users[chatId]) {
@@ -293,10 +282,8 @@ app.listen(PORT, () => console.log("🚀 Running on", PORT));
 
 // ================== LOOPS ==================
 setInterval(() => check().catch(console.error), 30000);
-
-// ⚠️ إشعار طمأنة كل 5 دقائق (اختياري)
 setInterval(() => heartbeat().catch(console.error), 300000);
 
-// ================== CRASH SAFE ==================
-process.on("uncaughtException", e => console.log(e));
-process.on("unhandledRejection", e => console.log(e));
+// ================== SAFETY ==================
+process.on("uncaughtException", console.log);
+process.on("unhandledRejection", console.log);
