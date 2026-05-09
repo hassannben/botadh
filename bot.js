@@ -12,125 +12,148 @@ const API_URL = "https://adhahi.dz/api/v1/public/wilaya-quotas";
 const dataFile = "./data.json";
 
 // ================== STORAGE ==================
-function loadData() {
+function load() {
   if (!fs.existsSync(dataFile)) {
     fs.writeFileSync(dataFile, JSON.stringify({ users: {}, state: {} }, null, 2));
   }
   return JSON.parse(fs.readFileSync(dataFile));
 }
 
-function saveData(d) {
+function save(d) {
   fs.writeFileSync(dataFile, JSON.stringify(d, null, 2));
 }
 
-// ================== SEND ==================
+// ================== TELEGRAM ==================
 async function send(chatId, text) {
   try {
     await axios.post(`${API}/sendMessage`, {
       chat_id: chatId,
       text
     });
-  } catch (e) {}
+  } catch {}
 }
 
-// ================== NORMALIZE ==================
+// ================== NORMALIZE (PRO MAX) ==================
 function norm(s) {
   return String(s || "")
-    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
-    .toLowerCase();
+    .trim();
 }
 
-// ================== OPEN CHECK ==================
+// ================== SMART MATCH ==================
+function matchWilaya(apiItem, selected) {
+  const a = norm(apiItem?.wilayaNameAr);
+  const b = norm(apiItem?.wilayaNameFr);
+  const s = norm(selected);
+
+  return a === s || b === s || a.includes(s) || s.includes(a);
+}
+
+// ================== OPEN DETECTOR ==================
 function isOpen(w) {
   return (
     w?.available === true ||
-    Number(w?.remainingQuota) > 0 ||
-    Number(w?.remaining) > 0
+    Number(w?.remainingQuota || 0) > 0 ||
+    Number(w?.remaining || 0) > 0
   );
 }
 
-// ================== FETCH API ==================
-async function fetchData() {
+// ================== FETCH ==================
+async function fetchAPI() {
   try {
-    const res = await axios.get(API_URL, { timeout: 15000 });
+    const res = await axios.get(API_URL, { timeout: 12000 });
     return Array.isArray(res.data) ? res.data : [];
   } catch {
     return [];
   }
 }
 
-// ================== CORE CHECK ==================
+// ================== CORE ENGINE (PRO MAX) ==================
+let lastSnapshot = {};
+
 async function check() {
-  const db = loadData();
-  const api = await fetchData();
+  const db = load();
+  const api = await fetchAPI();
 
   if (!api.length) return;
 
   for (const userId in db.users) {
     const user = db.users[userId];
-    const list = user.wilayas || [];
+    const selected = user?.wilayas || [];
 
-    for (const selected of list) {
+    for (const wilaya of selected) {
 
-      const match = api.find(x =>
-        norm(x.wilayaNameAr) === norm(selected) ||
-        norm(x.wilayaNameFr) === norm(selected)
-      );
+      const found = api.find(x => matchWilaya(x, wilaya));
+      if (!found) continue;
 
-      if (!match) continue;
-
-      const open = isOpen(match);
+      const open = isOpen(found);
 
       if (!db.state[userId]) db.state[userId] = {};
 
-      const last = db.state[userId][selected];
+      const prev = db.state[userId][wilaya];
 
-      // ================== OPEN EVENT ==================
-      if (open && last !== "open") {
-        db.state[userId][selected] = "open";
+      // ================== CHANGE DETECTION ==================
+      const key = `${userId}:${wilaya}`;
+      const last = lastSnapshot[key];
 
-        await send(userId, `🚨 فتح التسجيل:\n${selected}`);
+      if (last === open) continue; // 🔥 يمنع التكرار 100%
+
+      lastSnapshot[key] = open;
+
+      // ================== OPEN ==================
+      if (open && prev !== "open") {
+        db.state[userId][wilaya] = "open";
+
+        await send(
+          userId,
+          `🚨 فتح التسجيل الآن:\n📍 ${wilaya}`
+        );
       }
 
-      // ================== CLOSE EVENT ==================
-      if (!open && last === "open") {
-        db.state[userId][selected] = "closed";
+      // ================== CLOSE ==================
+      if (!open && prev === "open") {
+        db.state[userId][wilaya] = "closed";
 
-        await send(userId, `⛔ تم غلق التسجيل:\n${selected}`);
+        await send(
+          userId,
+          `⛔ تم إغلاق التسجيل:\n📍 ${wilaya}`
+        );
       }
 
-      // أول مرة
-      if (!last) {
-        db.state[userId][selected] = open ? "open" : "closed";
+      // init state
+      if (!prev) {
+        db.state[userId][wilaya] = open ? "open" : "closed";
       }
     }
   }
 
-  saveData(db);
+  save(db);
 }
 
-// ================== HEARTBEAT ==================
+// ================== HEART ==================
 async function heartbeat() {
-  const db = loadData();
+  const db = load();
 
   for (const id in db.users) {
-    await send(id, "🟢 البوت يعمل بشكل طبيعي");
+    await send(id, "🟢 البوت شغال (PRO MAX)");
   }
 }
 
-// ================== LOOP (FAST + SAFE) ==================
+// ================== LOOP (FAST + SAFE + STABLE) ==================
 setInterval(() => {
   check().catch(console.error);
-}, 12000); // 🔥 12 ثانية (أفضل استقرار)
+}, 10000); // 🔥 كل 10 ثواني (سريع جداً)
 
 setInterval(() => {
   heartbeat().catch(() => {});
 }, 300000);
 
 // ================== SERVER ==================
-app.get("/", (req, res) => res.send("BOT RUNNING"));
+app.get("/", (req, res) => res.send("PRO MAX BOT RUNNING"));
 
 app.listen(process.env.PORT || 3000, () =>
-  console.log("🚀 Bot started")
+  console.log("🚀 PRO MAX ACTIVE")
 );
