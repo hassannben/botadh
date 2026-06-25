@@ -202,7 +202,51 @@ app.post("/webhook", async (req, res) => {
     return send(chatId, "📌 أرسل رابط TikTok أو اضغط /start");
   }
 });
+// ================= FLUTTER API =================
+app.get("/download", async (req, res) => {
+  try {
+    const url = req.query.url;
 
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing url"
+      });
+    }
+
+    if (!detect(url)) {
+      return res.status(400).json({
+        success: false,
+        message: "Only TikTok links are supported"
+      });
+    }
+
+    const data = await getTikTok(url);
+
+    if (!data || !data.video) {
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch video"
+      });
+    }
+
+    res.json({
+      success: true,
+      author: data.author,
+      nickname: data.nickname,
+      country: data.country,
+      likes: data.likes,
+      views: data.views,
+      video: data.video
+    });
+
+  } catch (e) {
+    res.status(500).json({
+      success: false,
+      error: e.message
+    });
+  }
+});
 // ================= HOME =================
 app.get("/", (req, res) => {
   res.send("🚀 TikTok Bot PRO is Running");
